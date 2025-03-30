@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set id, data = complaint %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Technical Assessment Notes - Complaint #{{ id }}</h1>
+    <div>
+        <a href="{{ url_for('unified_complaint', complaint_id=id) }}" class="btn btn-primary me-2">Unified View</a>
+        <a href="{{ url_for('view_complaint', complaint_id=id) }}" class="btn btn-outline-primary me-2">Back to Complaint</a>
+        <a href="{{ url_for('add_technical_note_form', complaint_id=id) }}" class="btn btn-success">Add New Technical Note</a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Customer: {{ data['customerInformation']['fullName'] }} - Model: {{ data['productInformation']['modelNumber'] }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Complaint:</strong> 
+                    {% for problem in data['complaintDetails']['natureOfProblem'] %}
+                        <span class="badge bg-secondary me-1">{{ problem }}</span>
+                    {% endfor %}
+                </p>
+                <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
+                <p><strong>Warranty Status:</strong> 
+                    <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ data['warrantyInformation']['warrantyStatus'] }}
+                    </span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
+                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
+                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if technical_notes %}
+    <h2 class="mb-3">Existing Technical Notes ({{ technical_notes|length }})</h2>
+    
+    {% for note_id, complaint_id, note_data in technical_notes %}
+    <div class="card mb-4">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Technician: {{ note_data.technicianName }}</h5>
+            <span>Visit Date: {{ note_data.visitDate }}</span>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h6>Components Inspected</h6>
+                    <p>
+                        {% for component in note_data.technicalAssessment.componentInspected %}
+                            <span class="badge bg-info me-1">{{ component }}</span>
+                        {% endfor %}
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Parts Replaced</h6>
+                    <p>
+                        {% if note_data.partsReplaced %}
+                            {% for part in note_data.partsReplaced %}
+                                <span class="badge bg-warning text-dark me-1">{{ part }}</span>
+                            {% endfor %}
+                        {% else %}
+                            <em>No parts replaced</em>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <h6>Fault Diagnosis</h6>
+                <div class="p-3 bg-light rounded">
+                    {{ note_data.technicalAssessment.faultDiagnosis }}
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <h6>Root Cause</h6>
+                    <div class="p-3 bg-light rounded">
+                        {{ note_data.technicalAssessment.rootCause }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Proposed Solution</h6>
+                    <div class="p-3 bg-light rounded">
+                        {{ note_data.technicalAssessment.solutionProposed }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <h6>Repair Details</h6>
+                <div class="p-3 bg-light rounded">
+                    {{ note_data.repairDetails or "No details provided" }}
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center mb-2">
+                        <h6 class="mb-0 me-2">Follow-up Required:</h6>
+                        <span class="badge {% if note_data.followUpRequired %}bg-danger{% else %}bg-success{% endif %}">
+                            {{ "Yes" if note_data.followUpRequired else "No" }}
+                        </span>
+                    </div>
+                    {% if note_data.followUpRequired and note_data.followUpNotes %}
+                        <div class="p-3 bg-light rounded">
+                            {{ note_data.followUpNotes }}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <h6>Customer Satisfaction</h6>
+                    <div class="p-2 bg-light rounded text-center">
+                        <h4>
+                            {% if note_data.customerSatisfaction == '5' %}
+                                <span class="text-success">★★★★★</span>
+                            {% elif note_data.customerSatisfaction == '4' %}
+                                <span class="text-success">★★★★</span><span class="text-muted">★</span>
+                            {% elif note_data.customerSatisfaction == '3' %}
+                                <span class="text-warning">★★★</span><span class="text-muted">★★</span>
+                            {% elif note_data.customerSatisfaction == '2' %}
+                                <span class="text-warning">★★</span><span class="text-muted">★★★</span>
+                            {% elif note_data.customerSatisfaction == '1' %}
+                                <span class="text-danger">★</span><span class="text-muted">★★★★</span>
+                            {% else %}
+                                <span class="text-muted">Not specified</span>
+                            {% endif %}
+                        </h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer text-muted">
+            Note ID: {{ note_id }}
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-info">
+        There are no technical assessment notes for this complaint yet. You can add a new note using the button above.
+    </div>
+{% endif %}
+
+{% endblock %} 

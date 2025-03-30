@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Technical Assessment Notes List</h1>
+    <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">Back to Complaints</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Total: {{ total_count }} complaints with technical notes</h5>
+    </div>
+</div>
+
+{% if complaints %}
+    <div class="row">
+        {% for id, data, note_id in complaints %}
+        <div class="col-md-6">
+            <div class="card complaint-card">
+                <div class="card-header d-flex justify-content-between">
+                    <h5 class="mb-0">{{ data.customerInformation.fullName }}</h5>
+                    <span class="badge {% if data.warrantyInformation.warrantyStatus == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ data.warrantyInformation.warrantyStatus }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p><strong>Product:</strong> {{ data.productInformation.modelNumber }}</p>
+                    <p><strong>Issues:</strong> 
+                        {% for problem in data.complaintDetails.natureOfProblem %}
+                            <span class="badge bg-secondary me-1">{{ problem }}</span>
+                        {% endfor %}
+                    </p>
+                    <p><strong>Assessment Date:</strong> {{ data.complaintDetails.dateOfComplaint }}</p>
+                    <p><strong>Technician:</strong> <span class="badge bg-info">Inspection Completed</span></p>
+                    <div class="d-flex justify-content-end">
+                        <a href="{{ url_for('view_complaint', complaint_id=id) }}" class="btn btn-secondary me-2">Complaint</a>
+                        <a href="{{ url_for('view_technical_notes', complaint_id=id) }}" class="btn btn-primary">Technical Notes</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <nav aria-label="Pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('list_technical_notes', page=page-1) }}">Previous</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Previous</span>
+            </li>
+            {% endif %}
+            
+            {% for p in range(max(1, page-2), min(page+3, total_pages+1)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('list_technical_notes', page=p) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            
+            {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('list_technical_notes', page=page+1) }}">Next</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Next</span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+{% else %}
+    <div class="alert alert-info">
+        No technical assessment notes have been entered for any complaints yet.
+    </div>
+{% endif %}
+{% endblock %} 

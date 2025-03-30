@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="mb-4">Refrigerator Complaints</h1>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <form action="{{ url_for('list_complaints') }}" method="GET" class="d-flex">
+            <input type="text" name="search" class="form-control me-2" placeholder="Search complaints or customers..." value="{{ search }}">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </form>
+    </div>
+</div>
+
+{% if complaints %}
+    <div class="row">
+        {% for id, data, has_notes in complaints %}
+        <div class="col-md-6">
+            <div class="card complaint-card">
+                <div class="card-header d-flex justify-content-between">
+                    <h5 class="mb-0">{{ data['customerInformation']['fullName'] }}</h5>
+                    <div>
+                        <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ data['warrantyInformation']['warrantyStatus'] }}
+                        </span>
+                        {% if has_notes %}
+                        <span class="badge bg-info ms-1" title="Has technical notes">
+                            <i class="fas fa-tools"></i> Tech Notes
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p><strong>Product:</strong> {{ data['productInformation']['modelNumber'] }}</p>
+                    <p><strong>Issues:</strong> {{ data['complaintDetails']['natureOfProblem']|join(', ') }}</p>
+                    <p><strong>Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
+                    <div class="d-flex justify-content-end">
+                        <a href="{{ url_for('unified_complaint', complaint_id=id) }}" class="btn btn-primary me-2">Unified View</a>
+                        <a href="{{ url_for('view_complaint', complaint_id=id) }}" class="btn btn-secondary">Details</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <nav aria-label="Pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page > 1 %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search) }}">Previous</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Previous</span>
+            </li>
+            {% endif %}
+            
+            {% for p in range(max(1, page-2), min(page+3, total_pages+1)) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            
+            {% if page < total_pages %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search) }}">Next</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link">Next</span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+{% else %}
+    <div class="alert alert-info">
+        {% if search %}
+            No complaints found for "{{ search }}".
+        {% else %}
+            No complaints found.
+        {% endif %}
+    </div>
+{% endif %}
+{% endblock %} 

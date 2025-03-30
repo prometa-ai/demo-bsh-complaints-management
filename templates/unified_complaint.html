@@ -1,0 +1,284 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set id, data = complaint %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="text-primary">
+        <i class="fas fa-ticket-alt me-2"></i>Unified Complaint Ticket #{{ id }}
+    </h1>
+    <div>
+        <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left me-1"></i>Back to List
+        </a>
+    </div>
+</div>
+
+<!-- Main Ticket Information -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Customer: {{ data['customerInformation']['fullName'] }} - Model: {{ data['productInformation']['modelNumber'] }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <p><strong>Customer Name:</strong> {{ data['customerInformation']['fullName'] }}</p>
+                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
+                <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
+                <p><strong>Address:</strong> {{ data['customerInformation']['address'] }}, {{ data['customerInformation']['city'] }}, {{ data['customerInformation']['stateProvince'] }} {{ data['customerInformation']['postalCode'] }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Product Model:</strong> {{ data['productInformation']['modelNumber'] }}</p>
+                <p><strong>Serial Number:</strong> {{ data['productInformation']['serialNumber'] }}</p>
+                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
+                <p><strong>Warranty Status:</strong> 
+                    <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ data['warrantyInformation']['warrantyStatus'] }}
+                    </span>
+                    <span class="text-muted ms-2">Expires: {{ data['warrantyInformation']['warrantyExpirationDate'] }}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Complaint Information -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Customer Statement</h5>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
+                <p><strong>Problem Types:</strong> 
+                    {% for problem in data['complaintDetails']['natureOfProblem'] %}
+                        <span class="badge bg-primary me-1">{{ problem }}</span>
+                    {% endfor %}
+                </p>
+                <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
+                <p><strong>Date First Occurred:</strong> {{ data['complaintDetails']['problemFirstOccurrence'] }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Environmental Conditions:</strong></p>
+                <ul>
+                    <li>Room Temperature: {{ data['environmentalConditions']['roomTemperature'] }}</li>
+                    <li>Ventilation: {{ data['environmentalConditions']['ventilation'] }}</li>
+                    <li>Recent Changes: {{ data['environmentalConditions']['recentEnvironmentalChanges'] }}</li>
+                </ul>
+            </div>
+        </div>
+        <div class="mb-3">
+            <p><strong>Detailed Description:</strong></p>
+            <div class="p-3 bg-light rounded">{{ data['complaintDetails']['detailedDescription'] }}</div>
+        </div>
+        {% if data['complaintDetails']['repairAttempted'] %}
+        <div class="mb-3">
+            <p><strong>Previous Repair Attempt:</strong> Yes</p>
+            <div class="p-3 bg-light rounded">{{ data['complaintDetails']['repairDetails'] }}</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Customer Service Notes -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Customer Service Notes</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <p><strong>Initial Assessment:</strong></p>
+            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['initialAssessment'] }}</div>
+        </div>
+        <div class="mb-3">
+            <p><strong>Immediate Actions Taken:</strong></p>
+            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['immediateActionsTaken'] }}</div>
+        </div>
+        <div class="mb-3">
+            <p><strong>Recommendations:</strong></p>
+            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['recommendations'] }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Technical Assessment -->
+{% if technical_notes %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Technical Assessment & Field Service</h5>
+    </div>
+    <div class="card-body">
+        {% for note_id, complaint_id, note_data in technical_notes %}
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Technician: {{ note_data.technicianName }}</h6>
+                <span>Visit Date: {{ note_data.visitDate }}</span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Error Code/Symptom Code:</strong></p>
+                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.faultDiagnosis }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Faulty Parts Identified:</strong></p>
+                        <p>
+                            {% for component in note_data.technicalAssessment.componentInspected %}
+                                <span class="badge bg-info me-1">{{ component }}</span>
+                            {% endfor %}
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Root Cause:</strong></p>
+                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.rootCause }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Proposed Solution:</strong></p>
+                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.solutionProposed }}</div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <p><strong>Work Executed:</strong></p>
+                    <div class="p-3 bg-light rounded mb-2">{{ note_data.repairDetails or "No repair details provided" }}</div>
+                    
+                    {% if note_data.partsReplaced %}
+                    <p><strong>Parts Replaced:</strong></p>
+                    <p>
+                        {% for part in note_data.partsReplaced %}
+                            <span class="badge bg-warning text-dark me-1">{{ part }}</span>
+                        {% endfor %}
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Follow-up Required:</strong> 
+                            <span class="badge {% if note_data.followUpRequired %}bg-danger{% else %}bg-success{% endif %}">
+                                {{ "Yes" if note_data.followUpRequired else "No" }}
+                            </span>
+                        </p>
+                        {% if note_data.followUpRequired and note_data.followUpNotes %}
+                        <div class="p-3 bg-light rounded">{{ note_data.followUpNotes }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Customer Satisfaction:</strong></p>
+                        <div class="p-2 bg-light rounded text-center">
+                            <h5>
+                                {% if note_data.customerSatisfaction == '5' %}
+                                    <span class="text-success">★★★★★</span>
+                                {% elif note_data.customerSatisfaction == '4' %}
+                                    <span class="text-success">★★★★</span><span class="text-muted">★</span>
+                                {% elif note_data.customerSatisfaction == '3' %}
+                                    <span class="text-warning">★★★</span><span class="text-muted">★★</span>
+                                {% elif note_data.customerSatisfaction == '2' %}
+                                    <span class="text-warning">★★</span><span class="text-muted">★★★</span>
+                                {% elif note_data.customerSatisfaction == '1' %}
+                                    <span class="text-danger">★</span><span class="text-muted">★★★★</span>
+                                {% else %}
+                                    <span class="text-muted">Not specified</span>
+                                {% endif %}
+                            </h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Technical Assessment</h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            No technical assessment has been performed yet.
+            <a href="{{ url_for('add_technical_note_form', complaint_id=id) }}" class="btn btn-sm btn-primary ms-2">Add Technical Note</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Quality Analysis Results -->
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0">BSH Quality Analysis Result</h5>
+    </div>
+    <div class="card-body">
+        {% if ai_analysis %}
+        
+        {% if "INCONSISTENT" in ai_analysis.category %}
+        <div class="alert alert-warning mb-4">
+            <h5><i class="fas fa-exclamation-triangle me-2"></i>Inconsistency Detected</h5>
+            <p>The technical assessment findings differ from the customer's reported issue. This analysis addresses both concerns.</p>
+        </div>
+        {% endif %}
+        
+        <div class="p-4 bg-light rounded mb-3">
+            <div class="mb-4">
+                <h5 class="text-primary">Final Opinion:</h5>
+                <div class="p-3 bg-white rounded border">{{ ai_analysis.final_opinion }}</div>
+            </div>
+            
+            <div class="mb-4">
+                <h5 class="text-primary">Issue Category:</h5>
+                <div class="p-3 bg-white rounded border">
+                    <span class="badge {% if 'INCONSISTENT' in ai_analysis.category %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-5 p-2">{{ ai_analysis.category }}</span>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <h5 class="text-primary">Technical Diagnosis:</h5>
+                <div class="p-3 bg-white rounded border">{{ ai_analysis.technical_diagnosis | nl2br }}</div>
+            </div>
+            
+            {% if ai_analysis.root_cause %}
+            <div class="mb-4">
+                <h5 class="text-primary">Root Cause:</h5>
+                <div class="p-3 bg-white rounded border">{{ ai_analysis.root_cause }}</div>
+            </div>
+            {% endif %}
+            
+            {% if ai_analysis.solution_implemented %}
+            <div class="mb-4">
+                <h5 class="text-primary">Solution Implemented:</h5>
+                <div class="p-3 bg-white rounded border">{{ ai_analysis.solution_implemented }}</div>
+            </div>
+            {% endif %}
+            
+            {% if ai_analysis.systemic_assessment %}
+            <div class="mb-4">
+                <h5 class="text-primary">Systemic Assessment:</h5>
+                <div class="p-3 bg-white rounded border">{{ ai_analysis.systemic_assessment }}</div>
+            </div>
+            {% endif %}
+            
+            {% if ai_analysis.recommendations %}
+            <div class="mb-4">
+                <h5 class="text-primary">Recommendations:</h5>
+                <div class="p-3 bg-white rounded border">
+                    <ul class="mb-0">
+                        {% for rec in ai_analysis.recommendations %}
+                        <li>{{ rec }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            No quality analysis is available yet. Please add technical notes first.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

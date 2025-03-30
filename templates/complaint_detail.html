@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set id, data = complaint %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Complaint Details #{{ id }}</h1>
+    <div>
+        <a href="{{ url_for('unified_complaint', complaint_id=id) }}" class="btn btn-primary me-2">Unified View</a>
+        <a href="{{ url_for('view_technical_notes', complaint_id=id) }}" class="btn btn-info me-2">Technical Assessment Notes</a>
+        <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">Back to List</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Customer Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Name:</strong> {{ data['customerInformation']['fullName'] }}</p>
+                <p><strong>Address:</strong> {{ data['customerInformation']['address'] }}</p>
+                <p><strong>City:</strong> {{ data['customerInformation']['city'] }}</p>
+                <p><strong>State/Province:</strong> {{ data['customerInformation']['stateProvince'] }}</p>
+                <p><strong>Postal Code:</strong> {{ data['customerInformation']['postalCode'] }}</p>
+                <p><strong>Phone:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
+                <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Product Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Model Number:</strong> {{ data['productInformation']['modelNumber'] }}</p>
+                <p><strong>Serial Number:</strong> {{ data['productInformation']['serialNumber'] }}</p>
+                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
+                <p><strong>Place of Purchase:</strong> {{ data['productInformation']['placeOfPurchase'] }}</p>
+            </div>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Warranty Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Warranty Status:</strong> 
+                    <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ data['warrantyInformation']['warrantyStatus'] }}
+                    </span>
+                </p>
+                <p><strong>Warranty Expiration Date:</strong> {{ data['warrantyInformation']['warrantyExpirationDate'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Complaint Details</h5>
+    </div>
+    <div class="card-body">
+        <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
+        <p><strong>Problem Types:</strong> 
+            {% for problem in data['complaintDetails']['natureOfProblem'] %}
+                <span class="badge bg-primary me-1">{{ problem }}</span>
+            {% endfor %}
+        </p>
+        <p><strong>Detailed Description:</strong></p>
+        <div class="p-3 bg-light rounded mb-3">
+            {{ data['complaintDetails']['detailedDescription'] }}
+        </div>
+        <p><strong>Date Problem First Occurred:</strong> {{ data['complaintDetails']['problemFirstOccurrence'] }}</p>
+        <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
+        <p><strong>Repair Attempted:</strong> {{ 'Yes' if data['complaintDetails']['repairAttempted'] else 'No' }}</p>
+        {% if data['complaintDetails']['repairAttempted'] %}
+            <p><strong>Repair Details:</strong></p>
+            <div class="p-3 bg-light rounded">
+                {{ data['complaintDetails']['repairDetails'] }}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Environmental Conditions</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Room Temperature:</strong> {{ data['environmentalConditions']['roomTemperature'] }}</p>
+                <p><strong>Ventilation:</strong> {{ data['environmentalConditions']['ventilation'] }}</p>
+                <p><strong>Recent Environmental Changes:</strong> {{ data['environmentalConditions']['recentEnvironmentalChanges'] }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Customer Acknowledgment</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Preferred Resolution:</strong> {{ data['customerAcknowledgment']['preferredResolution'] }}</p>
+                <p><strong>Availability for Service Visit:</strong> {{ data['customerAcknowledgment']['availabilityForServiceVisit']|join(', ') }}</p>
+                <p><strong>Additional Comments:</strong> {{ data['customerAcknowledgment']['additionalComments'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Service Representative Notes</h5>
+    </div>
+    <div class="card-body">
+        <p><strong>Initial Assessment:</strong></p>
+        <div class="p-3 bg-light rounded mb-3">
+            {{ data['serviceRepresentativeNotes']['initialAssessment'] }}
+        </div>
+        <p><strong>Immediate Actions Taken:</strong></p>
+        <div class="p-3 bg-light rounded mb-3">
+            {{ data['serviceRepresentativeNotes']['immediateActionsTaken'] }}
+        </div>
+        <p><strong>Recommendations:</strong></p>
+        <div class="p-3 bg-light rounded">
+            {{ data['serviceRepresentativeNotes']['recommendations'] }}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Signatures</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Customer Signature:</strong> {{ data['signatures']['customerSignature'] }}</p>
+                <p><strong>Customer Signature Date:</strong> {{ data['signatures']['customerSignatureDate'] }}</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Service Representative Signature:</strong> {{ data['signatures']['serviceRepresentativeSignature'] }}</p>
+                <p><strong>Service Representative Signature Date:</strong> {{ data['signatures']['serviceRepresentativeSignatureDate'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

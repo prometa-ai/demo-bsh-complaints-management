@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="mb-4">Complaint Statistics</h1>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="stats-panel primary">
+            <h4>Total Complaints</h4>
+            <h2>{{ total_count }}</h2>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="stats-panel success">
+            <h4>Current Month</h4>
+            <h2>{{ current_month_count }}</h2>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="stats-panel warning">
+            <h4>Weekly Trend</h4>
+            <h2>↑</h2>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Complaints Over Time</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ time_chart }}" class="img-fluid" alt="Complaints Over Time">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Issue Types Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ issue_chart }}" class="img-fluid" alt="Issue Types Distribution">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Warranty Status Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ warranty_chart }}" class="img-fluid" alt="Warranty Status Distribution">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="text-center mt-4">
+    <a href="{{ url_for('list_complaints') }}" class="btn btn-primary">View All Complaints</a>
+</div>
+{% endblock %} 

@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="mb-4">Refrigerator Complaints Summary</h1>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="stats-panel primary">
+            <h2>{{ total_count }}</h2>
+            <p class="mb-0">Total Complaints</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stats-panel success">
+            <h2>{{ active_warranty_count }}</h2>
+            <p class="mb-0">Active Warranty</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stats-panel warning">
+            <h2>{{ recent_count }}</h2>
+            <p class="mb-0">In Last 7 Days</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Top 10 Most Common Issues</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ problem_chart }}" class="img-fluid" alt="Problem Distribution Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Warranty Status Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ warranty_chart }}" class="img-fluid" alt="Warranty Status Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="text-center mt-4">
+    <a href="{{ url_for('list_complaints') }}" class="btn btn-primary me-2">View All Complaints</a>
+    <a href="{{ url_for('statistics') }}" class="btn btn-outline-primary">Detailed Statistics</a>
+</div>
+{% endblock %} 

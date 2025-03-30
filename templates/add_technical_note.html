@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% block content %}
+{% set id, data = complaint %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Add Technical Assessment Note - Complaint #{{ id }}</h1>
+    <a href="{{ url_for('view_technical_notes', complaint_id=id) }}" class="btn btn-outline-secondary">Back to Technical Notes</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Customer: {{ data['customerInformation']['fullName'] }} - Model: {{ data['productInformation']['modelNumber'] }}</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Complaint:</strong> 
+                    {% for problem in data['complaintDetails']['natureOfProblem'] %}
+                        <span class="badge bg-secondary me-1">{{ problem }}</span>
+                    {% endfor %}
+                </p>
+                <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
+                <p><strong>Warranty Status:</strong> 
+                    <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ data['warrantyInformation']['warrantyStatus'] }}
+                    </span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
+                <p><strong>Issue Description:</strong> {{ data['complaintDetails']['detailedDescription']|truncate(100) }}</p>
+                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Technical Assessment Form</h5>
+    </div>
+    <div class="card-body">
+        {% if warning %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <h5><i class="fas fa-exclamation-triangle me-2"></i>Consistency Warning</h5>
+            <p>{{ warning }}</p>
+            <p><strong>Customer reported issue:</strong> 
+                {% for problem in data['complaintDetails']['natureOfProblem'] %}
+                    <span class="badge bg-info me-1">{{ problem }}</span>
+                {% endfor %}
+            </p>
+            <p><strong>Customer description:</strong> {{ data['complaintDetails']['detailedDescription'] }}</p>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        <form method="POST" action="{{ url_for('add_technical_note_form', complaint_id=id) }}">
+            <!-- Preserve form data if resubmitting -->
+            {% if form_data %}
+                <input type="hidden" name="technicianName" value="{{ form_data.get('technicianName', '') }}">
+                <input type="hidden" name="visitDate" value="{{ form_data.get('visitDate', '') }}">
+                <input type="hidden" name="faultDiagnosis" value="{{ form_data.get('faultDiagnosis', '') }}">
+                <input type="hidden" name="rootCause" value="{{ form_data.get('rootCause', '') }}">
+                <input type="hidden" name="solutionProposed" value="{{ form_data.get('solutionProposed', '') }}">
+                <input type="hidden" name="repairDetails" value="{{ form_data.get('repairDetails', '') }}">
+                <input type="hidden" name="followUpNotes" value="{{ form_data.get('followUpNotes', '') }}">
+                <input type="hidden" name="customerSatisfaction" value="{{ form_data.get('customerSatisfaction', '') }}">
+                
+                {% for component in form_data.getlist('componentInspected') %}
+                    <input type="hidden" name="componentInspected" value="{{ component }}">
+                {% endfor %}
+                
+                {% for part in form_data.getlist('partsReplaced') %}
+                    <input type="hidden" name="partsReplaced" value="{{ part }}">
+                {% endfor %}
+                
+                {% if inconsistent %}
+                <div class="mb-4 p-3 border border-warning bg-light rounded">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="confirmed_inconsistent" name="confirmed_inconsistent" required>
+                        <label class="form-check-label fw-bold" for="confirmed_inconsistent">
+                            I confirm that my technical assessment correctly identifies the issue, even though it may differ from the customer's reported problem.
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        By checking this box, you acknowledge that your diagnosis may address an underlying issue that differs from what the customer reported. This will be reflected in the quality analysis.
+                    </small>
+                </div>
+                {% endif %}
+                
+                <div class="text-center mb-4">
+                    <button type="submit" class="btn btn-primary btn-lg">Confirm and Save Technical Note</button>
+                </div>
+            {% else %}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="technicianName" class="form-label">Technician Name</label>
+                    <input type="text" class="form-control" id="technicianName" name="technicianName" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="visitDate" class="form-label">Visit Date</label>
+                    <input type="date" class="form-control" id="visitDate" name="visitDate" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Components Inspected</label>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Compressor" id="compressor">
+                            <label class="form-check-label" for="compressor">Compressor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Evaporator" id="evaporator">
+                            <label class="form-check-label" for="evaporator">Evaporator</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Condenser" id="condenser">
+                            <label class="form-check-label" for="condenser">Condenser</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Thermostat" id="thermostat">
+                            <label class="form-check-label" for="thermostat">Thermostat</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Ice Maker" id="icemaker">
+                            <label class="form-check-label" for="icemaker">Ice Maker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Door Seal" id="doorSeal">
+                            <label class="form-check-label" for="doorSeal">Door Seal</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Electronic Board" id="electronicCard">
+                            <label class="form-check-label" for="electronicCard">Electronic Board</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Fan Motor" id="fanMotor">
+                            <label class="form-check-label" for="fanMotor">Fan Motor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Refrigerant" id="refrigerant">
+                            <label class="form-check-label" for="refrigerant">Refrigerant</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="faultDiagnosis" class="form-label">Fault Diagnosis</label>
+                <textarea class="form-control" id="faultDiagnosis" name="faultDiagnosis" rows="3" required></textarea>
+                <div class="form-text">Explain the detailed diagnosis of the fault.</div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="rootCause" class="form-label">Root Cause</label>
+                    <textarea class="form-control" id="rootCause" name="rootCause" rows="3" required></textarea>
+                    <div class="form-text">Explain the root cause of the fault.</div>
+                </div>
+                <div class="col-md-6">
+                    <label for="solutionProposed" class="form-label">Proposed Solution</label>
+                    <textarea class="form-control" id="solutionProposed" name="solutionProposed" rows="3" required></textarea>
+                    <div class="form-text">Specify the solution proposal to be sent to the factory.</div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Parts Replaced</label>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Compressor" id="replaceCompressor">
+                            <label class="form-check-label" for="replaceCompressor">Compressor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Evaporator" id="replaceEvaporator">
+                            <label class="form-check-label" for="replaceEvaporator">Evaporator</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Condenser" id="replaceCondenser">
+                            <label class="form-check-label" for="replaceCondenser">Condenser</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Thermostat" id="replaceThermostat">
+                            <label class="form-check-label" for="replaceThermostat">Thermostat</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Ice Maker" id="replaceIcemaker">
+                            <label class="form-check-label" for="replaceIcemaker">Ice Maker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Door Seal" id="replaceDoorSeal">
+                            <label class="form-check-label" for="replaceDoorSeal">Door Seal</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Electronic Board" id="replaceElectronicCard">
+                            <label class="form-check-label" for="replaceElectronicCard">Electronic Board</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Fan Motor" id="replaceFanMotor">
+                            <label class="form-check-label" for="replaceFanMotor">Fan Motor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Refrigerant" id="replaceRefrigerant">
+                            <label class="form-check-label" for="replaceRefrigerant">Refrigerant</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="repairDetails" class="form-label">Repair Details</label>
+                <textarea class="form-control" id="repairDetails" name="repairDetails" rows="3"></textarea>
+                <div class="form-text">Specify the details of the repair work.</div>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="followUpRequired" name="followUpRequired">
+                    <label class="form-check-label" for="followUpRequired">Follow-up Required</label>
+                </div>
+            </div>
+
+            <div class="mb-3" id="followUpNotesDiv" style="display: none;">
+                <label for="followUpNotes" class="form-label">Follow-up Notes</label>
+                <textarea class="form-control" id="followUpNotes" name="followUpNotes" rows="2"></textarea>
+                <div class="form-text">Explain the follow-up actions needed.</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="customerSatisfaction" class="form-label">Customer Satisfaction (1-5)</label>
+                <select class="form-select" id="customerSatisfaction" name="customerSatisfaction" required>
+                    <option value="">Select</option>
+                    <option value="5">5 - Very Satisfied</option>
+                    <option value="4">4 - Satisfied</option>
+                    <option value="3">3 - Neutral</option>
+                    <option value="2">2 - Dissatisfied</option>
+                    <option value="1">1 - Very Dissatisfied</option>
+                </select>
+            </div>
+
+            <div class="text-end">
+                <button type="submit" class="btn btn-primary">Save Technical Note</button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const followUpCheckbox = document.getElementById('followUpRequired');
+    const followUpNotesDiv = document.getElementById('followUpNotesDiv');
+    
+    followUpCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            followUpNotesDiv.style.display = 'block';
+        } else {
+            followUpNotesDiv.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %} 
