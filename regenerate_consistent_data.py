@@ -493,7 +493,7 @@ def regenerate_database():
         print("Cleared existing data. Generating new data...")
         
         # Generate complaints (fewer to speed up testing)
-        num_complaints = 500
+        num_complaints = 2000
         special_complaint_id = None
         
         # Generate and insert complaints

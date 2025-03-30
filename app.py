@@ -67,41 +67,106 @@ def connect_to_db():
         print(f"Database connection error: {e}")
         raise
 
-def get_all_complaints(page=1, per_page=20, search_term=None):
-    """Get all complaints with pagination."""
+def get_all_complaints(page=1, per_page=20, search_term=None, time_period=None):
+    """Get all complaints with pagination and optional time filtering."""
     conn = connect_to_db()
     cursor = conn.cursor()
     
     offset = (page - 1) * per_page
     
+    # Add time filtering conditions
+    time_filter_condition = ""
+    time_filter_params = []
+    
+    if time_period:
+        now = datetime.now()
+        
+        if time_period == '24h':
+            # Last 24 hours
+            start_date = (now - timedelta(hours=24)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period == '1w':
+            # Last week
+            start_date = (now - timedelta(days=7)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period == '30d':
+            # Last 30 days
+            start_date = (now - timedelta(days=30)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period == '3m':
+            # Last 3 months
+            start_date = (now - timedelta(days=90)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period == '6m':
+            # Last 6 months
+            start_date = (now - timedelta(days=180)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period == '1y':
+            # Last year
+            start_date = (now - timedelta(days=365)).isoformat()
+            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
+            time_filter_params = [start_date]
+        elif time_period.startswith('custom:'):
+            # Custom date range: 'custom:YYYY-MM-DD:YYYY-MM-DD'
+            try:
+                _, start_date, end_date = time_period.split(':')
+                time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s"
+                # Add time to end date to include the entire day
+                end_date = f"{end_date}T23:59:59"
+                time_filter_params = [start_date, end_date]
+            except ValueError:
+                # If format is incorrect, ignore custom filter
+                pass
+    
+    # Base query parts
     if search_term:
-        cursor.execute("""
+        query = """
         SELECT c.id, c.data, 
                (SELECT COUNT(*) FROM technical_notes t WHERE t.complaint_id = c.id) > 0 as has_notes
         FROM complaints c
-        WHERE c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
-        OR c.data->'customerInformation'->>'fullName' ILIKE %s
-        ORDER BY c.id DESC LIMIT %s OFFSET %s
-        """, (f'%{search_term}%', f'%{search_term}%', per_page, offset))
+        WHERE (c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
+        OR c.data->'customerInformation'->>'fullName' ILIKE %s)
+        """
+        params = [f'%{search_term}%', f'%{search_term}%'] + time_filter_params
+        query += time_filter_condition
+        query += " ORDER BY c.id DESC LIMIT %s OFFSET %s"
+        params += [per_page, offset]
+        cursor.execute(query, params)
     else:
-        cursor.execute("""
+        query = """
         SELECT c.id, c.data,
                (SELECT COUNT(*) FROM technical_notes t WHERE t.complaint_id = c.id) > 0 as has_notes
         FROM complaints c
-        ORDER BY c.id DESC LIMIT %s OFFSET %s
-        """, (per_page, offset))
+        WHERE 1=1
+        """
+        params = time_filter_params.copy()
+        query += time_filter_condition
+        query += " ORDER BY c.id DESC LIMIT %s OFFSET %s"
+        params += [per_page, offset]
+        cursor.execute(query, params)
     
     results = cursor.fetchall()
     
-    # Get total count for pagination
+    # Get total count for pagination with same filters
     if search_term:
-        cursor.execute("""
+        count_query = """
         SELECT COUNT(*) FROM complaints 
-        WHERE data->'complaintDetails'->>'detailedDescription' ILIKE %s
-        OR data->'customerInformation'->>'fullName' ILIKE %s
-        """, (f'%{search_term}%', f'%{search_term}%'))
+        WHERE (data->'complaintDetails'->>'detailedDescription' ILIKE %s
+        OR data->'customerInformation'->>'fullName' ILIKE %s)
+        """
+        count_params = [f'%{search_term}%', f'%{search_term}%'] + time_filter_params
+        count_query += time_filter_condition
+        cursor.execute(count_query, count_params)
     else:
-        cursor.execute("SELECT COUNT(*) FROM complaints")
+        count_query = "SELECT COUNT(*) FROM complaints WHERE 1=1"
+        count_params = time_filter_params.copy()
+        count_query += time_filter_condition
+        cursor.execute(count_query, count_params)
     
     total_count = cursor.fetchone()[0]
     
@@ -1179,11 +1244,21 @@ def list_complaints():
     """List all complaints with pagination."""
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '')
+    time_period = request.args.get('time_period', None)
+    
+    # Check if a custom date range is provided
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    if start_date and end_date:
+        # Format the custom date range as 'custom:YYYY-MM-DD:YYYY-MM-DD'
+        time_period = f"custom:{start_date}:{end_date}"
     
     complaints, total_count = get_all_complaints(
         page=page, 
         per_page=20,
-        search_term=search if search else None
+        search_term=search if search else None,
+        time_period=time_period
     )
     
     total_pages = (total_count + 19) // 20  # Ceiling division
@@ -1193,7 +1268,8 @@ def list_complaints():
         complaints=complaints,
         page=page,
         total_pages=total_pages,
-        search=search
+        search=search,
+        time_period=time_period
     )
 
 @app.route('/complaints/<int:complaint_id>')
