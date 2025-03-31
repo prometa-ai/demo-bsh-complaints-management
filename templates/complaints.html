@@ -20,23 +20,31 @@
             <div class="d-flex flex-wrap align-items-center">
                 <span class="me-2">Time period:</span>
                 <div class="btn-group me-3">
-                    <a href="{{ url_for('list_complaints', search=search) }}" class="btn btn-sm btn-outline-secondary {% if not time_period %}active{% endif %}">All</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='24h') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '24h' %}active{% endif %}">24h</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='1w') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1w' %}active{% endif %}">1w</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='30d') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '30d' %}active{% endif %}">30d</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='3m') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '3m' %}active{% endif %}">3m</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='6m') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '6m' %}active{% endif %}">6m</a>
-                    <a href="{{ url_for('list_complaints', search=search, time_period='1y') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1y' %}active{% endif %}">1y</a>
+                    <a href="{{ url_for('list_complaints', search=search, has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if not time_period %}active{% endif %}">All</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='24h', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '24h' %}active{% endif %}">24h</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='1w', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1w' %}active{% endif %}">1w</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='30d', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '30d' %}active{% endif %}">30d</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='3m', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '3m' %}active{% endif %}">3m</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='6m', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '6m' %}active{% endif %}">6m</a>
+                    <a href="{{ url_for('list_complaints', search=search, time_period='1y', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1y' %}active{% endif %}">1y</a>
                 </div>
                 
-                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#customDateCollapse" aria-expanded="false">
+                <button class="btn btn-sm btn-outline-primary me-3" type="button" data-bs-toggle="collapse" data-bs-target="#customDateCollapse" aria-expanded="false">
                     Custom Range
                 </button>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="hasNotesCheck" {% if has_notes %}checked{% endif %}>
+                    <label class="form-check-label" for="hasNotesCheck">
+                        <i class="fas fa-tools"></i> With Technical Notes
+                    </label>
+                </div>
             </div>
             
             <div class="collapse mt-2 {% if time_period and time_period.startswith('custom:') %}show{% endif %}" id="customDateCollapse">
                 <form action="{{ url_for('list_complaints') }}" method="GET" class="row g-2 align-items-center">
                     <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="has_notes" value="{{ has_notes }}">
                     <div class="col-md-4">
                         <label for="startDate" class="form-label small">Start Date</label>
                         <input type="date" id="startDate" name="start_date" class="form-control form-control-sm" required>
@@ -50,40 +58,89 @@
                     </div>
                 </form>
             </div>
+
+            <div class="mt-3">
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-filter me-2"></i>
+                    {% if time_period %}
+                        {% if time_period == '24h' %}
+                            Showing complaints from the last 24 hours
+                        {% elif time_period == '1w' %}
+                            Showing complaints from the last week
+                        {% elif time_period == '30d' %}
+                            Showing complaints from the last 30 days
+                        {% elif time_period == '3m' %}
+                            Showing complaints from the last 3 months
+                        {% elif time_period == '6m' %}
+                            Showing complaints from the last 6 months
+                        {% elif time_period == '1y' %}
+                            Showing complaints from the last year
+                        {% elif time_period.startswith('custom:') %}
+                            Showing complaints for the selected date range
+                        {% endif %}
+                    {% else %}
+                        Showing all complaints
+                    {% endif %}
+                    {% if has_notes %}
+                        <span class="ms-2">with technical notes</span>
+                    {% endif %}
+                    <span class="badge bg-primary ms-2">{{ total_count }} complaints</span>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 {% if complaints %}
     <div class="row">
-        {% for id, data, has_notes in complaints %}
-        <div class="col-md-6">
-            <div class="card complaint-card">
-                <div class="card-header d-flex justify-content-between">
-                    <h5 class="mb-0">{{ data['customerInformation']['fullName'] }}</h5>
-                    <div>
-                        <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                            {{ data['warrantyInformation']['warrantyStatus'] }}
-                        </span>
-                        {% if has_notes %}
-                        <span class="badge bg-info ms-1" title="Has technical notes">
-                            <i class="fas fa-tools"></i> Tech Notes
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p><strong>Product:</strong> {{ data['productInformation']['modelNumber'] }}</p>
-                    <p><strong>Issues:</strong> {{ data['complaintDetails']['natureOfProblem']|join(', ') }}</p>
-                    <p><strong>Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
-                    <div class="d-flex justify-content-end">
-                        <a href="{{ url_for('unified_complaint', complaint_id=id) }}" class="btn btn-primary me-2">Unified View</a>
-                        <a href="{{ url_for('view_complaint', complaint_id=id) }}" class="btn btn-secondary">Details</a>
-                    </div>
-                </div>
-            </div>
+        <div class="col-md-12">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Customer</th>
+                        <th>Model</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Technical Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for complaint in complaints %}
+                    <tr>
+                        <td>{{ complaint[0] }}</td>
+                        <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
+                        <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
+                        <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'] }}</td>
+                        <td>
+                            <span class="badge {% if complaint[1]['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ complaint[1]['warrantyInformation']['warrantyStatus'] }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if complaint[2] %}
+                                <span class="badge bg-info">
+                                    <i class="fas fa-tools me-1"></i>Has Notes
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-times me-1"></i>No Notes
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-eye"></i> View
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
-        {% endfor %}
     </div>
 
     <!-- Pagination -->
@@ -91,7 +148,7 @@
         <ul class="pagination justify-content-center">
             {% if page > 1 %}
             <li class="page-item">
-                <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period) }}">Previous</a>
+                <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period, has_notes=has_notes) }}">Previous</a>
             </li>
             {% else %}
             <li class="page-item disabled">
@@ -101,13 +158,13 @@
             
             {% for p in range(max(1, page-2), min(page+3, total_pages+1)) %}
             <li class="page-item {% if p == page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period) }}">{{ p }}</a>
+                <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes) }}">{{ p }}</a>
             </li>
             {% endfor %}
             
             {% if page < total_pages %}
             <li class="page-item">
-                <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period) }}">Next</a>
+                <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period, has_notes=has_notes) }}">Next</a>
             </li>
             {% else %}
             <li class="page-item disabled">
@@ -127,4 +184,29 @@
         {% endif %}
     </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const hasNotesCheck = document.getElementById('hasNotesCheck');
+    hasNotesCheck.addEventListener('change', function() {
+        const currentUrl = new URL(window.location.href);
+        if (this.checked) {
+            currentUrl.searchParams.set('has_notes', 'true');
+        } else {
+            currentUrl.searchParams.delete('has_notes');
+        }
+        window.location.href = currentUrl.toString();
+    });
+
+    // Add click event listeners to view buttons
+    document.querySelectorAll('a[href*="/complaints/"]').forEach(button => {
+        button.addEventListener('click', function(e) {
+            console.log('View button clicked:', this.href);
+            // Don't prevent default - let the link work normally
+        });
+    });
+});
+</script>
 {% endblock %} 

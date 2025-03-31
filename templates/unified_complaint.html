@@ -105,8 +105,11 @@
 <!-- Technical Assessment -->
 {% if technical_notes %}
 <div class="card mb-4">
-    <div class="card-header">
+    <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Technical Assessment & Field Service</h5>
+        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTechnicalNoteModal">
+            <i class="fas fa-plus me-1"></i>Add Technical Note
+        </button>
     </div>
     <div class="card-body">
         {% for note_id, complaint_id, note_data in technical_notes %}
@@ -201,7 +204,9 @@
     <div class="card-body">
         <div class="alert alert-info">
             No technical assessment has been performed yet.
-            <a href="{{ url_for('add_technical_note_form', complaint_id=id) }}" class="btn btn-sm btn-primary ms-2">Add Technical Note</a>
+            <button type="button" class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#addTechnicalNoteModal">
+                <i class="fas fa-plus me-1"></i>Add Technical Note
+            </button>
         </div>
     </div>
 </div>
@@ -279,6 +284,167 @@
             No quality analysis is available yet. Please add technical notes first.
         </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Add Technical Note Modal -->
+<div class="modal fade" id="addTechnicalNoteModal" tabindex="-1" aria-labelledby="addTechnicalNoteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTechnicalNoteModalLabel">Add Technical Assessment Note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('unified_complaint', complaint_id=id) }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="technicianName" class="form-label">Technician Name</label>
+                        <input type="text" class="form-control" id="technicianName" name="technicianName" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="visitDate" class="form-label">Visit Date</label>
+                        <input type="date" class="form-control" id="visitDate" name="visitDate" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Components Inspected</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Compressor" id="compressor">
+                            <label class="form-check-label" for="compressor">Compressor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Evaporator Fan" id="evaporatorFan">
+                            <label class="form-check-label" for="evaporatorFan">Evaporator Fan</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Condenser Fan" id="condenserFan">
+                            <label class="form-check-label" for="condenserFan">Condenser Fan</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Thermostat" id="thermostat">
+                            <label class="form-check-label" for="thermostat">Thermostat</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Control Board" id="controlBoard">
+                            <label class="form-check-label" for="controlBoard">Control Board</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Door Seal" id="doorSeal">
+                            <label class="form-check-label" for="doorSeal">Door Seal</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Lighting System" id="lightingSystem">
+                            <label class="form-check-label" for="lightingSystem">Lighting System</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Ice Maker" id="iceMaker">
+                            <label class="form-check-label" for="iceMaker">Ice Maker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Water Dispenser" id="waterDispenser">
+                            <label class="form-check-label" for="waterDispenser">Water Dispenser</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Defrost System" id="defrostSystem">
+                            <label class="form-check-label" for="defrostSystem">Defrost System</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="faultDiagnosis" class="form-label">Fault Diagnosis</label>
+                        <textarea class="form-control" id="faultDiagnosis" name="faultDiagnosis" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="rootCause" class="form-label">Root Cause</label>
+                        <textarea class="form-control" id="rootCause" name="rootCause" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="solutionProposed" class="form-label">Proposed Solution</label>
+                        <textarea class="form-control" id="solutionProposed" name="solutionProposed" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Parts Replaced</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Compressor" id="replacedCompressor">
+                            <label class="form-check-label" for="replacedCompressor">Compressor</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Evaporator Fan" id="replacedEvaporatorFan">
+                            <label class="form-check-label" for="replacedEvaporatorFan">Evaporator Fan</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Condenser Fan" id="replacedCondenserFan">
+                            <label class="form-check-label" for="replacedCondenserFan">Condenser Fan</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Thermostat" id="replacedThermostat">
+                            <label class="form-check-label" for="replacedThermostat">Thermostat</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Control Board" id="replacedControlBoard">
+                            <label class="form-check-label" for="replacedControlBoard">Control Board</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Door Seal" id="replacedDoorSeal">
+                            <label class="form-check-label" for="replacedDoorSeal">Door Seal</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Lighting System" id="replacedLightingSystem">
+                            <label class="form-check-label" for="replacedLightingSystem">Lighting System</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Ice Maker" id="replacedIceMaker">
+                            <label class="form-check-label" for="replacedIceMaker">Ice Maker</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Water Dispenser" id="replacedWaterDispenser">
+                            <label class="form-check-label" for="replacedWaterDispenser">Water Dispenser</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Defrost System" id="replacedDefrostSystem">
+                            <label class="form-check-label" for="replacedDefrostSystem">Defrost System</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="repairDetails" class="form-label">Repair Details</label>
+                        <textarea class="form-control" id="repairDetails" name="repairDetails" rows="3" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="followUpRequired" name="followUpRequired">
+                            <label class="form-check-label" for="followUpRequired">Follow-up Required</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="followUpNotes" class="form-label">Follow-up Notes</label>
+                        <textarea class="form-control" id="followUpNotes" name="followUpNotes" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="customerSatisfaction" class="form-label">Customer Satisfaction Rating</label>
+                        <select class="form-select" id="customerSatisfaction" name="customerSatisfaction" required>
+                            <option value="">Select rating...</option>
+                            <option value="5">5 - Excellent</option>
+                            <option value="4">4 - Good</option>
+                            <option value="3">3 - Satisfactory</option>
+                            <option value="2">2 - Poor</option>
+                            <option value="1">1 - Very Poor</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Technical Note</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %} 

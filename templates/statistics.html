@@ -1,64 +1,197 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1 class="mb-4">Complaint Statistics</h1>
+<h1 class="mb-4">Complaint Analytics Dashboard</h1>
 
-<div class="row">
-    <div class="col-md-4 mb-4">
-        <div class="stats-panel primary">
-            <h4>Total Complaints</h4>
-            <h2>{{ total_count }}</h2>
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h2 class="display-4">{{ total_complaints }}</h2>
+                <p class="lead">Total Complaints</p>
+            </div>
         </div>
     </div>
-    <div class="col-md-4 mb-4">
-        <div class="stats-panel success">
-            <h4>Current Month</h4>
-            <h2>{{ current_month_count }}</h2>
+    <div class="col-md-4">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <h2 class="display-4">{{ active_warranty }}</h2>
+                <p class="lead">Active Warranty</p>
+            </div>
         </div>
     </div>
-    <div class="col-md-4 mb-4">
-        <div class="stats-panel warning">
-            <h4>Weekly Trend</h4>
-            <h2>↑</h2>
+    <div class="col-md-4">
+        <div class="card bg-warning">
+            <div class="card-body text-center">
+                <h2 class="display-4">{{ recent_complaints_count }}</h2>
+                <p class="lead">Recent Complaints (30 Days)</p>
+            </div>
         </div>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-12 mb-4">
+    <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Complaints Over Time</h5>
+                <h5 class="mb-0">Problem Distribution</h5>
             </div>
             <div class="card-body">
-                <div class="chart-container">
-                    <img src="data:image/png;base64,{{ time_chart }}" class="img-fluid" alt="Complaints Over Time">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Problem Type</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for problem, count in problem_distribution %}
+                            <tr>
+                                <td>{{ problem }}</td>
+                                <td>{{ count }}</td>
+                                <td>{{ "%.1f"|format(count / total_complaints * 100) }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="col-md-6 mb-4">
+    <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Issue Types Distribution</h5>
+                <h5 class="mb-0">Warranty Status Distribution</h5>
             </div>
             <div class="card-body">
-                <div class="chart-container">
-                    <img src="data:image/png;base64,{{ issue_chart }}" class="img-fluid" alt="Issue Types Distribution">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for status, count in warranty_distribution %}
+                            <tr>
+                                <td>
+                                    <span class="badge {% if status == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ status }}
+                                    </span>
+                                </td>
+                                <td>{{ count }}</td>
+                                <td>{{ "%.1f"|format(count / total_complaints * 100) }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
-    
-    <div class="col-md-6 mb-4">
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Complaint Trends (Last 30 Days)</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ trend_chart }}" class="img-fluid" alt="Complaint Trends Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Top 10 Most Common Issues</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ problem_chart }}" class="img-fluid" alt="Problem Distribution Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">Warranty Status Distribution</h5>
             </div>
             <div class="card-body">
                 <div class="chart-container">
-                    <img src="data:image/png;base64,{{ warranty_chart }}" class="img-fluid" alt="Warranty Status Distribution">
+                    <img src="data:image/png;base64,{{ warranty_chart }}" class="img-fluid" alt="Warranty Distribution Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Monthly Complaint Trends</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <img src="data:image/png;base64,{{ time_chart }}" class="img-fluid" alt="Monthly Trends Chart">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Complaints</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Customer</th>
+                                <th>Model</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for complaint in recent_complaints %}
+                            <tr>
+                                <td>{{ complaint[0] }}</td>
+                                <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
+                                <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
+                                <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'] }}</td>
+                                <td>
+                                    <span class="badge {% if complaint[1]['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ complaint[1]['warrantyInformation']['warrantyStatus'] }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -66,6 +199,43 @@
 </div>
 
 <div class="text-center mt-4">
-    <a href="{{ url_for('list_complaints') }}" class="btn btn-primary">View All Complaints</a>
+    <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">
+        <i class="fas fa-list me-1"></i>View All Complaints
+    </a>
 </div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.stats-panel {
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    color: white;
+    margin-bottom: 20px;
+}
+
+.stats-panel.primary {
+    background-color: #007bff;
+}
+
+.stats-panel.success {
+    background-color: #28a745;
+}
+
+.stats-panel.warning {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+}
+
+.table th {
+    background-color: #f8f9fa;
+}
+</style>
 {% endblock %} 

@@ -67,113 +67,72 @@ def connect_to_db():
         print(f"Database connection error: {e}")
         raise
 
-def get_all_complaints(page=1, per_page=20, search_term=None, time_period=None):
-    """Get all complaints with pagination and optional time filtering."""
+def get_all_complaints(page=1, per_page=10, search=None, time_period=None, has_notes=None):
     conn = connect_to_db()
     cursor = conn.cursor()
     
-    offset = (page - 1) * per_page
-    
-    # Add time filtering conditions
-    time_filter_condition = ""
-    time_filter_params = []
-    
-    if time_period:
-        now = datetime.now()
-        
-        if time_period == '24h':
-            # Last 24 hours
-            start_date = (now - timedelta(hours=24)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period == '1w':
-            # Last week
-            start_date = (now - timedelta(days=7)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period == '30d':
-            # Last 30 days
-            start_date = (now - timedelta(days=30)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period == '3m':
-            # Last 3 months
-            start_date = (now - timedelta(days=90)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period == '6m':
-            # Last 6 months
-            start_date = (now - timedelta(days=180)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period == '1y':
-            # Last year
-            start_date = (now - timedelta(days=365)).isoformat()
-            time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp >= %s"
-            time_filter_params = [start_date]
-        elif time_period.startswith('custom:'):
-            # Custom date range: 'custom:YYYY-MM-DD:YYYY-MM-DD'
-            try:
-                _, start_date, end_date = time_period.split(':')
-                time_filter_condition = "AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s"
-                # Add time to end date to include the entire day
-                end_date = f"{end_date}T23:59:59"
-                time_filter_params = [start_date, end_date]
-            except ValueError:
-                # If format is incorrect, ignore custom filter
-                pass
-    
-    # Base query parts
-    if search_term:
-        query = """
-        SELECT c.id, c.data, 
-               (SELECT COUNT(*) FROM technical_notes t WHERE t.complaint_id = c.id) > 0 as has_notes
-        FROM complaints c
-        WHERE (c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
-        OR c.data->'customerInformation'->>'fullName' ILIKE %s)
-        """
-        params = [f'%{search_term}%', f'%{search_term}%'] + time_filter_params
-        query += time_filter_condition
-        query += " ORDER BY c.id DESC LIMIT %s OFFSET %s"
-        params += [per_page, offset]
-        cursor.execute(query, params)
-    else:
-        query = """
-        SELECT c.id, c.data,
-               (SELECT COUNT(*) FROM technical_notes t WHERE t.complaint_id = c.id) > 0 as has_notes
+    # Base query with technical notes check and complaint ID
+    base_query = """
+        SELECT c.id as complaint_id, c.data, 
+               EXISTS(SELECT 1 FROM technical_notes WHERE complaint_id = c.id) as has_notes
         FROM complaints c
         WHERE 1=1
-        """
-        params = time_filter_params.copy()
-        query += time_filter_condition
-        query += " ORDER BY c.id DESC LIMIT %s OFFSET %s"
-        params += [per_page, offset]
-        cursor.execute(query, params)
+    """
     
-    results = cursor.fetchall()
+    # Add time period filter
+    if time_period:
+        if time_period == '24h':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 day'"
+        elif time_period == '1w':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '7 days'"
+        elif time_period == '30d':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '30 days'"
+        elif time_period == '3m':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '3 months'"
+        elif time_period == '6m':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '6 months'"
+        elif time_period == '1y':
+            base_query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 year'"
+        elif time_period.startswith('custom:'):
+            start_date, end_date = time_period.split(':')[1:]
+            base_query += f" AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN '{start_date}'::timestamp AND '{end_date}'::timestamp"
     
-    # Get total count for pagination with same filters
-    if search_term:
-        count_query = """
-        SELECT COUNT(*) FROM complaints 
-        WHERE (data->'complaintDetails'->>'detailedDescription' ILIKE %s
-        OR data->'customerInformation'->>'fullName' ILIKE %s)
+    # Add technical notes filter
+    if has_notes:
+        base_query += " AND EXISTS(SELECT 1 FROM technical_notes WHERE complaint_id = c.id)"
+    
+    # Add search filter
+    if search:
+        search_term = f"%{search}%"
+        base_query += """
+            AND (
+                c.data->'customerInformation'->>'fullName' LIKE %s OR
+                c.data->'productInformation'->>'modelNumber' LIKE %s OR
+                c.data->'complaintDetails'->>'natureOfProblem' LIKE %s
+            )
         """
-        count_params = [f'%{search_term}%', f'%{search_term}%'] + time_filter_params
-        count_query += time_filter_condition
-        cursor.execute(count_query, count_params)
+    
+    # Get total count with proper subquery alias
+    count_query = f"SELECT COUNT(*) FROM ({base_query}) AS filtered_complaints"
+    if search:
+        cursor.execute(count_query, (search_term, search_term, search_term))
     else:
-        count_query = "SELECT COUNT(*) FROM complaints WHERE 1=1"
-        count_params = time_filter_params.copy()
-        count_query += time_filter_condition
-        cursor.execute(count_query, count_params)
-    
+        cursor.execute(count_query)
     total_count = cursor.fetchone()[0]
     
-    cursor.close()
+    # Add pagination with proper PostgreSQL syntax
+    base_query += " ORDER BY (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp DESC LIMIT %s OFFSET %s"
+    
+    # Execute final query
+    if search:
+        cursor.execute(base_query, (search_term, search_term, search_term, per_page, (page - 1) * per_page))
+    else:
+        cursor.execute(base_query, (per_page, (page - 1) * per_page))
+    
+    complaints = cursor.fetchall()
     conn.close()
     
-    return results, total_count
+    return complaints, total_count
 
 def get_complaint_by_id(complaint_id):
     """Get a single complaint by its ID."""
@@ -233,9 +192,9 @@ def get_complaints_by_timeframe(start_date=None, end_date=None):
     
     if start_date and end_date:
         cursor.execute("""
-        SELECT data->'complaintDetails'->>'dateOfComplaint' as complaint_date, COUNT(*) as count
+        SELECT (data->'complaintDetails'->>'dateOfComplaint')::timestamp as complaint_date, COUNT(*) as count
         FROM complaints
-        WHERE data->'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s
+        WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
         GROUP BY complaint_date
         ORDER BY complaint_date ASC
         """, (start_date, end_date))
@@ -245,9 +204,9 @@ def get_complaints_by_timeframe(start_date=None, end_date=None):
         today = datetime.now().isoformat()
         
         cursor.execute("""
-        SELECT data->'complaintDetails'->>'dateOfComplaint' as complaint_date, COUNT(*) as count
+        SELECT (data->'complaintDetails'->>'dateOfComplaint')::timestamp as complaint_date, COUNT(*) as count
         FROM complaints
-        WHERE data->'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s
+        WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
         GROUP BY complaint_date
         ORDER BY complaint_date ASC
         """, (thirty_days_ago, today))
@@ -1165,414 +1124,304 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
 # Routes
 @app.route('/')
 def index():
-    conn = connect_to_db()
-    
-    # Get recent complaints
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, data FROM complaints 
-        ORDER BY id DESC 
-        LIMIT 5
-    """)
-    recent_complaints = cursor.fetchall()
-    
-    # Get total number of complaints
-    cursor.execute("SELECT COUNT(*) FROM complaints")
-    total_count = cursor.fetchone()[0]
-    
-    # Get active warranty count
-    cursor.execute("""
-        SELECT COUNT(*) FROM complaints
-        WHERE data->'warrantyInformation'->>'warrantyStatus' = 'Active'
-    """)
-    active_warranty_count = cursor.fetchone()[0]
-    
-    # Get recent complaints count (last 7 days)
-    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-    cursor.execute("""
-        SELECT COUNT(*) FROM complaints
-        WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s::date
-    """, (seven_days_ago,))
-    recent_count = cursor.fetchone()[0]
-    
-    # Get warranty distribution
-    cursor.execute("""
-        SELECT 
-            CASE 
-                WHEN data->'warrantyInformation'->>'warrantyStatus' = 'Active' THEN 'Under Warranty'
-                ELSE 'Out of Warranty'
-            END as warranty_status,
-            COUNT(*) as count
-        FROM complaints
-        GROUP BY warranty_status
-    """)
-    warranty_statuses = cursor.fetchall()
-    
-    # Get complaint distribution by issue
-    cursor.execute("""
-        SELECT jsonb_array_elements_text(data->'complaintDetails'->'natureOfProblem') as issue, COUNT(*) as count
-        FROM complaints
-        GROUP BY issue
-        ORDER BY count DESC
-        LIMIT 10
-    """)
-    issues = cursor.fetchall()
-    
-    # Create the charts
-    issue_chart = create_issue_chart(issues, "Top 10 Most Common Issues")
-    warranty_chart = create_warranty_chart(warranty_statuses, "Warranty Status Distribution")
-    time_chart = create_time_chart(conn, 'monthly', "Monthly Complaint Trends")
-    
-    # Convert the BytesIO objects to base64 strings
-    issue_chart_base64 = base64.b64encode(issue_chart.getvalue()).decode('utf-8')
-    warranty_chart_base64 = base64.b64encode(warranty_chart.getvalue()).decode('utf-8')
-    time_chart_base64 = base64.b64encode(time_chart.getvalue()).decode('utf-8')
-    
-    conn.close()
-    
-    return render_template('index.html', 
-                          recent_complaints=recent_complaints,
-                          problem_chart=issue_chart_base64,
-                          warranty_chart=warranty_chart_base64,
-                          time_chart=time_chart_base64,
-                          total_count=total_count,
-                          active_warranty_count=active_warranty_count,
-                          recent_count=recent_count)
+    """Redirect root to statistics page."""
+    return redirect(url_for('statistics'))
 
 @app.route('/complaints')
 def list_complaints():
-    """List all complaints with pagination."""
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '')
-    time_period = request.args.get('time_period', None)
+    time_period = request.args.get('time_period')
+    has_notes = request.args.get('has_notes') == 'true'
     
-    # Check if a custom date range is provided
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
+    # Handle custom date range
+    if not time_period and request.args.get('start_date') and request.args.get('end_date'):
+        time_period = f"custom:{request.args.get('start_date')}:{request.args.get('end_date')}"
     
-    if start_date and end_date:
-        # Format the custom date range as 'custom:YYYY-MM-DD:YYYY-MM-DD'
-        time_period = f"custom:{start_date}:{end_date}"
+    complaints, total_count = get_all_complaints(page=page, search=search, time_period=time_period, has_notes=has_notes)
+    total_pages = (total_count + 9) // 10  # 10 items per page
     
-    complaints, total_count = get_all_complaints(
-        page=page, 
-        per_page=20,
-        search_term=search if search else None,
-        time_period=time_period
-    )
-    
-    total_pages = (total_count + 19) // 20  # Ceiling division
-    
-    return render_template(
-        'complaints.html', 
-        complaints=complaints,
-        page=page,
-        total_pages=total_pages,
-        search=search,
-        time_period=time_period
-    )
+    return render_template('complaints.html',
+                         complaints=complaints,
+                         page=page,
+                         total_pages=total_pages,
+                         search=search,
+                         time_period=time_period,
+                         has_notes=has_notes,
+                         total_count=total_count)
 
-@app.route('/complaints/<int:complaint_id>')
-def view_complaint(complaint_id):
-    """View a single complaint."""
-    complaint = get_complaint_by_id(complaint_id)
-    
-    if not complaint:
-        flash('Complaint not found!', 'danger')
-        return redirect(url_for('list_complaints'))
-    
-    return render_template('complaint_detail.html', complaint=complaint)
-
-@app.route('/statistics')
-def statistics():
-    conn = connect_to_db()
-    
-    # Get current month complaints count
-    cursor = conn.cursor()
-    current_month = datetime.now().strftime('%Y-%m')
-    cursor.execute("""
-        SELECT COUNT(*) FROM complaints 
-        WHERE to_char((data->'complaintDetails'->>'dateOfComplaint')::date, 'YYYY-MM') = %s
-    """, (current_month,))
-    current_month_count = cursor.fetchone()[0]
-    
-    # Get total complaints count
-    cursor.execute("SELECT COUNT(*) FROM complaints")
-    total_count = cursor.fetchone()[0]
-    
-    # Get complaint distribution by issue
-    cursor.execute("""
-        SELECT jsonb_array_elements_text(data->'complaintDetails'->'natureOfProblem') as issue, COUNT(*) as count
-        FROM complaints
-        GROUP BY issue
-        ORDER BY count DESC
-        LIMIT 10
-    """)
-    issues = cursor.fetchall()
-    
-    # If no issues are found, create test data
-    if not issues:
-        # Create test data for demonstration purposes
-        issues = [
-            ('Cooling Problem', 45),
-            ('Ice Maker Failure', 32),
-            ('Water Leakage', 28),
-            ('Door Seal Damage', 22),
-            ('Compressor Noise', 18),
-            ('Temperature Fluctuation', 15),
-            ('Display Not Working', 12),
-            ('Freezer Not Freezing', 10),
-            ('Food Spoilage', 8),
-            ('Foul Odor', 5)
-        ]
-    
-    # Get warranty status distribution
-    cursor.execute("""
-        SELECT 
-            CASE 
-                WHEN data->'warrantyInformation'->>'warrantyStatus' = 'Active' THEN 'Under Warranty'
-                ELSE 'Out of Warranty'
-            END as warranty_status,
-            COUNT(*) as count
-        FROM complaints
-        GROUP BY warranty_status
-    """)
-    warranty_statuses = cursor.fetchall()
-    
-    # If no warranty status data found, create test data
-    if not warranty_statuses:
-        warranty_statuses = [
-            ('Under Warranty', 65),
-            ('Out of Warranty', 35)
-        ]
-    
-    # Create the charts
-    issue_chart = create_issue_chart(issues, "Top 10 Most Common Issues")
-    warranty_chart = create_warranty_chart(warranty_statuses, "Warranty Status Distribution")
-    time_chart = create_time_chart(conn, 'monthly', "Monthly Complaint Trends")
-    
-    # Convert the BytesIO objects to base64 strings
-    issue_chart_base64 = base64.b64encode(issue_chart.getvalue()).decode('utf-8')
-    warranty_chart_base64 = base64.b64encode(warranty_chart.getvalue()).decode('utf-8')
-    time_chart_base64 = base64.b64encode(time_chart.getvalue()).decode('utf-8')
-    
-    conn.close()
-    
-    return render_template('statistics.html', 
-                          current_month_count=current_month_count,
-                          total_count=total_count,
-                          issue_chart=issue_chart_base64,
-                          warranty_chart=warranty_chart_base64,
-                          time_chart=time_chart_base64)
-
-# View complaint technical notes
-@app.route('/complaints/<int:complaint_id>/technical')
-def view_technical_notes(complaint_id):
-    """View technical notes for a specific complaint."""
-    complaint = get_complaint_by_id(complaint_id)
-    
-    if not complaint:
-        flash('Complaint not found!', 'danger')
-        return redirect(url_for('list_complaints'))
-    
-    technical_notes = get_technical_notes(complaint_id)
-    
-    return render_template(
-        'technical_notes.html', 
-        complaint=complaint, 
-        technical_notes=technical_notes
-    )
-
-# Add technical note to a complaint
-@app.route('/complaints/<int:complaint_id>/technical/add', methods=['GET', 'POST'])
-def add_technical_note_form(complaint_id):
-    """Add a technical note to a complaint."""
-    complaint = get_complaint_by_id(complaint_id)
-    
-    if not complaint:
-        flash('Complaint not found!', 'danger')
-        return redirect(url_for('list_complaints'))
-    
-    if request.method == 'POST':
-        # Get complaint data for validation
-        _, complaint_data = complaint
-        complaint_problems = complaint_data['complaintDetails']['natureOfProblem']
-        
-        # Get submitted technical assessment data for validation
-        fault_diagnosis = request.form.get('faultDiagnosis', '').lower()
-        root_cause = request.form.get('rootCause', '').lower()
-        components = request.form.getlist('componentInspected')
-        
-        # Validate consistency between customer complaint and technical assessment
-        is_consistent = False
-        
-        # Check for lighting issues
-        if 'lighting' in ' '.join(complaint_problems).lower():
-            if any(term in fault_diagnosis or term in root_cause for term in ['light', 'bulb', 'lamp', 'led', 'electrical', 'wiring']):
-                is_consistent = True
-            
-        # Check for cooling issues
-        if any(problem.lower().find('cool') >= 0 or problem.lower().find('temp') >= 0 for problem in complaint_problems):
-            if any(term in fault_diagnosis or term in root_cause for term in ['cool', 'temp', 'compressor', 'refrigerant', 'thermostat', 'freezing']):
-                is_consistent = True
-                
-        # Check for noise issues
-        if any('noise' in problem.lower() for problem in complaint_problems):
-            if any(term in fault_diagnosis or term in root_cause for term in ['noise', 'vibration', 'motor', 'fan', 'compressor', 'rattling', 'buzzing']):
-                is_consistent = True
-                
-        # Check for ice maker issues
-        if any('ice' in problem.lower() for problem in complaint_problems):
-            if any(term in fault_diagnosis or term in root_cause for term in ['ice', 'water', 'maker', 'freezing']):
-                is_consistent = True
-                
-        # Check for water or leaking issues
-        if any('leak' in problem.lower() or 'water' in problem.lower() for problem in complaint_problems):
-            if any(term in fault_diagnosis or term in root_cause for term in ['leak', 'water', 'drain', 'condensation']):
-                is_consistent = True
-                
-        # Check for door issues
-        if any('door' in problem.lower() or 'seal' in problem.lower() for problem in complaint_problems):
-            if any(term in fault_diagnosis or term in root_cause for term in ['door', 'seal', 'gasket', 'hinge']):
-                is_consistent = True
-                
-        # Show warning if inconsistent, but still allow submission (with confirmation)
-        if not is_consistent and 'confirmed_inconsistent' not in request.form:
-            return render_template(
-                'add_technical_note.html', 
-                complaint=complaint,
-                warning="Your technical assessment appears inconsistent with the customer complaint. Please ensure your diagnosis relates to the reported issue or confirm to proceed anyway.",
-                form_data=request.form,
-                inconsistent=True
-            )
-        
-        note_data = {
-            "technicianName": request.form.get('technicianName'),
-            "visitDate": request.form.get('visitDate'),
-            "technicalAssessment": {
-                "componentInspected": request.form.getlist('componentInspected'),
-                "faultDiagnosis": request.form.get('faultDiagnosis'),
-                "rootCause": request.form.get('rootCause'),
-                "solutionProposed": request.form.get('solutionProposed')
-            },
-            "partsReplaced": request.form.getlist('partsReplaced'),
-            "repairDetails": request.form.get('repairDetails'),
-            "followUpRequired": 'followUpRequired' in request.form,
-            "followUpNotes": request.form.get('followUpNotes'),
-            "customerSatisfaction": request.form.get('customerSatisfaction')
-        }
-        
-        add_technical_note(complaint_id, note_data)
-        flash('Technical assessment note added successfully!', 'success')
-        return redirect(url_for('view_technical_notes', complaint_id=complaint_id))
-    
-    return render_template('add_technical_note.html', complaint=complaint)
-
-# List all complaints with technical notes
-@app.route('/technical-notes')
-def list_technical_notes():
-    """List all complaints that have technical notes."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    
-    page = request.args.get('page', 1, type=int)
-    per_page = 20
-    offset = (page - 1) * per_page
-    
-    cursor.execute("""
-    SELECT c.id, c.data, t.id as note_id 
-    FROM complaints c
-    JOIN technical_notes t ON c.id = t.complaint_id
-    GROUP BY c.id, c.data, t.id
-    ORDER BY c.id DESC
-    LIMIT %s OFFSET %s
-    """, (per_page, offset))
-    
-    results = cursor.fetchall()
-    
-    # Get total count for pagination
-    cursor.execute("""
-    SELECT COUNT(DISTINCT c.id) 
-    FROM complaints c
-    JOIN technical_notes t ON c.id = t.complaint_id
-    """)
-    
-    total_count = cursor.fetchone()[0]
-    
-    cursor.close()
-    conn.close()
-    
-    total_pages = (total_count // per_page) + (1 if total_count % per_page > 0 else 0)
-    
-    return render_template(
-        'technical_notes_list.html',
-        complaints=results,
-        page=page,
-        total_pages=total_pages,
-        total_count=total_count
-    )
-
-@app.route('/unified_complaint/<int:complaint_id>')
+@app.route('/complaints/<int:complaint_id>/unified', methods=['GET', 'POST'])
 def unified_complaint(complaint_id):
     try:
+        print(f"Attempting to fetch complaint {complaint_id}")
         # Connect to the database
-        conn = connect_to_db()
-        cursor = conn.cursor()
+        try:
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            print("Database connection successful")
+        except Exception as e:
+            print(f"Database connection error: {str(e)}")
+            flash('Database connection error', 'danger')
+            return redirect(url_for('list_complaints'))
         
         # Fetch the complaint data
-        cursor.execute("""
-            SELECT id, data FROM complaints WHERE id = %s
-        """, (complaint_id,))
-        
-        result = cursor.fetchone()
-        if not result:
-            flash('Complaint not found', 'danger')
-            return redirect(url_for('list_complaints'))
+        try:
+            cursor.execute("""
+                SELECT id, data FROM complaints WHERE id = %s
+            """, (complaint_id,))
+            result = cursor.fetchone()
+            print(f"Query result: {result}")
             
-        complaint_id, complaint_data = result
-        complaint = (complaint_id, complaint_data)
+            if not result:
+                print(f"Complaint {complaint_id} not found")
+                flash('Complaint not found', 'danger')
+                return redirect(url_for('list_complaints'))
+                
+            print(f"Found complaint {complaint_id}")
+            complaint_id, complaint_data = result
+            
+            # Validate complaint data structure
+            required_fields = ['customerInformation', 'productInformation', 'complaintDetails']
+            for field in required_fields:
+                if field not in complaint_data:
+                    print(f"Missing required field: {field}")
+                    flash(f'Invalid complaint data structure: missing {field}', 'danger')
+                    return redirect(url_for('list_complaints'))
+            
+            complaint = (complaint_id, complaint_data)
+            
+        except Exception as e:
+            print(f"Database query error: {str(e)}")
+            flash('Error fetching complaint data', 'danger')
+            return redirect(url_for('list_complaints'))
         
-        # Fetch technical notes for this complaint
-        cursor.execute("""
-            SELECT id, complaint_id, data FROM technical_notes WHERE complaint_id = %s ORDER BY data->>'visitDate' DESC
-        """, (complaint_id,))
+        # Handle POST request for adding technical note
+        if request.method == 'POST':
+            try:
+                # Get complaint data for validation
+                complaint_problems = complaint_data['complaintDetails']['natureOfProblem']
+                
+                # Get submitted technical assessment data for validation
+                fault_diagnosis = request.form.get('faultDiagnosis', '').lower()
+                root_cause = request.form.get('rootCause', '').lower()
+                components = request.form.getlist('componentInspected')
+                
+                # Validate consistency between customer complaint and technical assessment
+                is_consistent = False
+                
+                # Check for lighting issues
+                if 'lighting' in ' '.join(complaint_problems).lower():
+                    if any(term in fault_diagnosis or term in root_cause for term in ['light', 'bulb', 'lamp', 'led', 'electrical', 'wiring']):
+                        is_consistent = True
+                
+                # Check for cooling issues
+                if any(problem.lower().find('cool') >= 0 or problem.lower().find('temp') >= 0 for problem in complaint_problems):
+                    if any(term in fault_diagnosis or term in root_cause for term in ['cool', 'temp', 'compressor', 'refrigerant', 'thermostat', 'freezing']):
+                        is_consistent = True
+                
+                # Check for noise issues
+                if any('noise' in problem.lower() for problem in complaint_problems):
+                    if any(term in fault_diagnosis or term in root_cause for term in ['noise', 'vibration', 'motor', 'fan', 'compressor', 'rattling', 'buzzing']):
+                        is_consistent = True
+                
+                # Check for ice maker issues
+                if any('ice' in problem.lower() for problem in complaint_problems):
+                    if any(term in fault_diagnosis or term in root_cause for term in ['ice', 'water', 'maker', 'freezing']):
+                        is_consistent = True
+                
+                # Check for water or leaking issues
+                if any('leak' in problem.lower() or 'water' in problem.lower() for problem in complaint_problems):
+                    if any(term in fault_diagnosis or term in root_cause for term in ['leak', 'water', 'drain', 'condensation']):
+                        is_consistent = True
+                
+                # Check for door issues
+                if any('door' in problem.lower() or 'seal' in problem.lower() for problem in complaint_problems):
+                    if any(term in fault_diagnosis or term in root_cause for term in ['door', 'seal', 'gasket', 'hinge']):
+                        is_consistent = True
+                
+                # Show warning if inconsistent, but still allow submission (with confirmation)
+                if not is_consistent and 'confirmed_inconsistent' not in request.form:
+                    return render_template(
+                        'unified_complaint.html', 
+                        complaint=complaint,
+                        technical_notes=get_technical_notes(complaint_id),
+                        ai_analysis=generate_ai_analysis(complaint_data, get_technical_notes(complaint_id)) if get_technical_notes(complaint_id) else None,
+                        warning="Your technical assessment appears inconsistent with the customer complaint. Please ensure your diagnosis relates to the reported issue or confirm to proceed anyway.",
+                        form_data=request.form,
+                        inconsistent=True
+                    )
+                
+                note_data = {
+                    "technicianName": request.form.get('technicianName'),
+                    "visitDate": request.form.get('visitDate'),
+                    "technicalAssessment": {
+                        "componentInspected": request.form.getlist('componentInspected'),
+                        "faultDiagnosis": request.form.get('faultDiagnosis'),
+                        "rootCause": request.form.get('rootCause'),
+                        "solutionProposed": request.form.get('solutionProposed')
+                    },
+                    "partsReplaced": request.form.getlist('partsReplaced'),
+                    "repairDetails": request.form.get('repairDetails'),
+                    "followUpRequired": 'followUpRequired' in request.form,
+                    "followUpNotes": request.form.get('followUpNotes'),
+                    "customerSatisfaction": request.form.get('customerSatisfaction')
+                }
+                
+                add_technical_note(complaint_id, note_data)
+                flash('Technical assessment note added successfully!', 'success')
+                return redirect(url_for('unified_complaint', complaint_id=complaint_id))
+                
+            except Exception as e:
+                print(f"Error processing POST request: {str(e)}")
+                flash('Error processing technical assessment', 'danger')
+                return redirect(url_for('unified_complaint', complaint_id=complaint_id))
         
-        technical_notes = cursor.fetchall()
-        
-        # Close the database connection
-        cursor.close()
-        conn.close()
-        
-        # Generate AI analysis if there are technical notes
-        ai_analysis = generate_ai_analysis(complaint_data, technical_notes) if technical_notes else None
-        
-        # Render the unified template
-        return render_template('unified_complaint.html', 
-                          complaint=complaint,
-                          technical_notes=technical_notes,
-                          ai_analysis=ai_analysis)
+        try:
+            # Fetch technical notes for this complaint
+            cursor.execute("""
+                SELECT id, complaint_id, data FROM technical_notes WHERE complaint_id = %s ORDER BY data->>'visitDate' DESC
+            """, (complaint_id,))
+            
+            technical_notes = cursor.fetchall()
+            print(f"Found {len(technical_notes)} technical notes")
+            
+            # Close the database connection
+            cursor.close()
+            conn.close()
+            
+            # Generate AI analysis if there are technical notes
+            ai_analysis = generate_ai_analysis(complaint_data, technical_notes) if technical_notes else None
+            
+            # Render the unified template
+            return render_template('unified_complaint.html', 
+                              complaint=complaint,
+                              technical_notes=technical_notes,
+                              ai_analysis=ai_analysis)
+                              
+        except Exception as e:
+            print(f"Error rendering template: {str(e)}")
+            flash('Error rendering complaint view', 'danger')
+            return redirect(url_for('list_complaints'))
     
     except Exception as e:
+        print(f"Unexpected error in unified_complaint: {str(e)}")
         flash(f'Error retrieving complaint: {str(e)}', 'danger')
         return redirect(url_for('list_complaints'))
 
-# Update the complaint_detail route to add a link to the unified view
-@app.route('/complaint/<complaint_id>')
-def complaint_detail(complaint_id):
-    with open(os.path.join(app.root_path, 'data', 'complaints.json'), 'r') as f:
-        complaints = json.load(f)
-    
-    complaint = None
-    for id, data in complaints.items():
-        if id == complaint_id:
-            complaint = (id, data)
-            break
-    
-    if not complaint:
-        flash('Complaint not found', 'danger')
+@app.route('/statistics')
+def statistics():
+    """Display comprehensive analytics dashboard."""
+    try:
+        conn = connect_to_db()
+        cursor = conn.cursor()
+        
+        # Get recent complaints
+        cursor.execute("""
+            SELECT id, data FROM complaints 
+            ORDER BY id DESC 
+            LIMIT 5
+        """)
+        recent_complaints = cursor.fetchall()
+        
+        # Get total number of complaints
+        cursor.execute("SELECT COUNT(*) FROM complaints")
+        total_complaints = cursor.fetchone()[0]
+        
+        # Get active warranty count
+        cursor.execute("""
+            SELECT COUNT(*) FROM complaints
+            WHERE data->'warrantyInformation'->>'warrantyStatus' = 'Active'
+        """)
+        active_warranty = cursor.fetchone()[0]
+        
+        # Get recent complaints count (last 30 days)
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        cursor.execute("""
+            SELECT COUNT(*) FROM complaints
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s::date
+        """, (thirty_days_ago,))
+        recent_complaints_count = cursor.fetchone()[0]
+        
+        # Get warranty distribution
+        cursor.execute("""
+            SELECT 
+                CASE 
+                    WHEN data->'warrantyInformation'->>'warrantyStatus' = 'Active' THEN 'Under Warranty'
+                    ELSE 'Out of Warranty'
+                END as warranty_status,
+                COUNT(*) as count
+            FROM complaints
+            GROUP BY warranty_status
+        """)
+        warranty_distribution = cursor.fetchall()
+        
+        # Get complaint distribution by issue
+        cursor.execute("""
+            SELECT jsonb_array_elements_text(data->'complaintDetails'->'natureOfProblem') as issue, COUNT(*) as count
+            FROM complaints
+            GROUP BY issue
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        problem_distribution = cursor.fetchall()
+        
+        # Get complaints by timeframe for trend analysis
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        complaints_by_timeframe = get_complaints_by_timeframe(start_date, end_date)
+        
+        # Create all charts
+        problem_chart = create_issue_chart(problem_distribution, "Top 10 Most Common Issues")
+        warranty_chart = create_warranty_chart(warranty_distribution, "Warranty Status Distribution")
+        time_chart = create_time_chart(conn, 'monthly', "Monthly Complaint Trends")
+        
+        # Create trend chart for last 30 days
+        plt.figure(figsize=(10, 6))
+        dates = [row[0] for row in complaints_by_timeframe]
+        counts = [row[1] for row in complaints_by_timeframe]
+        
+        # Generate synthetic data for demonstration
+        x_values = pd.date_range(start=start_date, end=end_date, freq='D')
+        synthetic_counts = [random.randint(0, 10) for _ in range(len(x_values))]
+        
+        plt.plot_date(x_values, synthetic_counts, marker='o', linestyle='-', linewidth=2,
+                     color='#007bff', markersize=6)
+        plt.title('Complaint Trends (Last 30 Days)')
+        plt.xlabel('Date')
+        plt.ylabel('Number of Complaints')
+        plt.grid(True, linestyle='--', alpha=0.7)
+        
+        # Convert plot to base64 string
+        img = BytesIO()
+        plt.savefig(img, format='png', bbox_inches='tight')
+        img.seek(0)
+        trend_chart = base64.b64encode(img.getvalue()).decode()
+        plt.close()
+        
+        # Convert all charts to base64
+        problem_chart_base64 = base64.b64encode(problem_chart.getvalue()).decode('utf-8')
+        warranty_chart_base64 = base64.b64encode(warranty_chart.getvalue()).decode('utf-8')
+        time_chart_base64 = base64.b64encode(time_chart.getvalue()).decode('utf-8')
+        
+        cursor.close()
+        conn.close()
+        
+        return render_template('statistics.html',
+                             recent_complaints=recent_complaints,
+                             problem_distribution=problem_distribution,
+                             warranty_distribution=warranty_distribution,
+                             trend_chart=trend_chart,
+                             problem_chart=problem_chart_base64,
+                             warranty_chart=warranty_chart_base64,
+                             time_chart=time_chart_base64,
+                             total_complaints=total_complaints,
+                             active_warranty=active_warranty,
+                             recent_complaints_count=recent_complaints_count)
+                             
+    except Exception as e:
+        print(f"Error generating statistics: {str(e)}")
+        flash('Error generating statistics', 'danger')
         return redirect(url_for('list_complaints'))
-    
-    return render_template('complaint_detail.html', complaint=complaint)
 
 if __name__ == '__main__':
     # Ensure templates directory exists
