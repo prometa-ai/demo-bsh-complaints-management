@@ -45,9 +45,36 @@
 <!-- Complaint Information -->
 <div class="card mb-4">
     <div class="card-header">
-        <h5 class="mb-0">Customer Statement</h5>
+        <h5 class="mb-0">Complaint Details</h5>
     </div>
     <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Customer Information</h6>
+                <p><strong>Name:</strong> {{ data['customerInformation']['fullName'] }}</p>
+                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
+                <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
+                <p><strong>Address:</strong> {{ data['customerInformation']['address'] }}</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Resolution Status</h6>
+                <form action="{{ url_for('update_complaint_status', complaint_id=id) }}" method="POST" class="mb-3">
+                    <div class="input-group">
+                        <select name="status" class="form-select">
+                            <option value="Not Resolved" {% if data['complaintDetails'].get('resolutionStatus') == 'Not Resolved' %}selected{% endif %}>Not Resolved</option>
+                            <option value="Resolved" {% if data['complaintDetails'].get('resolutionStatus') == 'Resolved' %}selected{% endif %}>Resolved</option>
+                            <option value="Canceled" {% if data['complaintDetails'].get('resolutionStatus') == 'Canceled' %}selected{% endif %}>Canceled</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary">Update Status</button>
+                    </div>
+                </form>
+                
+                <h6>Product Information</h6>
+                <p><strong>Model Number:</strong> {{ data['productInformation']['modelNumber'] }}</p>
+                <p><strong>Serial Number:</strong> {{ data['productInformation']['serialNumber'] }}</p>
+                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
+            </div>
+        </div>
         <div class="row mb-3">
             <div class="col-md-6">
                 <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>

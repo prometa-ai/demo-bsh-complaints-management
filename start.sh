@@ -3,6 +3,10 @@
 # Exit on error
 set -e
 
+# Kill any existing process on port 5001
+echo "Checking for existing process on port 5001..."
+lsof -ti:5001 | xargs kill -9 2>/dev/null || true
+
 # Check if venv exists, create if not
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
