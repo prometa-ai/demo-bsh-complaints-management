@@ -108,6 +108,7 @@
                 <table class="table table-striped table-hover">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Date</th>
                             <th>Customer</th>
                             <th>Model</th>
@@ -121,6 +122,9 @@
                     <tbody>
                         {% for complaint in complaints %}
                         <tr>
+                            <td>
+                                <span class="badge bg-secondary">{{ complaint[0] }}</span>
+                            </td>
                             <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'].split('T')[0] }}</td>
                             <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
                             <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
