@@ -231,26 +231,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const hasNotesCheck = document.getElementById('hasNotesCheck');
-    hasNotesCheck.addEventListener('change', function() {
-        const currentUrl = new URL(window.location.href);
-        if (this.checked) {
-            currentUrl.searchParams.set('has_notes', 'true');
-        } else {
-            currentUrl.searchParams.delete('has_notes');
-        }
-        window.location.href = currentUrl.toString();
-    });
-
-    // Add click event listeners to view buttons
-    document.querySelectorAll('a[href*="/complaints/"]').forEach(button => {
-        button.addEventListener('click', function(e) {
-            console.log('View button clicked:', this.href);
-            // Don't prevent default - let the link work normally
-        });
-    });
-});
-</script>
+<script src="{{ url_for('static', filename='js/complaint-handlers.js') }}"></script>
 {% endblock %} 
