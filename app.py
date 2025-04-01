@@ -53,8 +53,16 @@ try:
     
     # Use environment variable approach which is more stable
     os.environ["OPENAI_API_KEY"] = api_key
-    client = OpenAI()  # Uses the environment variable by default
-    print("OpenAI client initialized successfully")
+    
+    try:
+        # Initialize without any extra parameters to avoid proxy settings
+        client = OpenAI(api_key=api_key)
+        print("OpenAI client initialized successfully with explicit api_key")
+    except TypeError as te:
+        # Fall back to simpler initialization if there's a TypeError
+        print(f"Falling back to simpler initialization: {te}")
+        client = OpenAI()
+        print("OpenAI client initialized successfully with default parameters")
     
 except Exception as e:
     print(f"Error initializing OpenAI client: {e}")
@@ -1898,4 +1906,4 @@ if __name__ == '__main__':
     setup_technical_notes_table()
     
     # Disable reloader and use threaded=True to avoid hanging issues
-    app.run(host='127.0.0.1', port=5005, debug=False, use_reloader=False, threaded=True) 
+    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False, threaded=True) 

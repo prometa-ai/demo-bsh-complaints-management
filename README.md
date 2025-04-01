@@ -36,15 +36,21 @@ A comprehensive system for managing customer complaints about refrigerators, int
    python setup_database.py
    ```
 
-5. Run the application:
-   ```
-   python app.py
-   ```
+## Starting the Application
 
-6. Open your browser and go to:
-   ```
-   http://127.0.0.1:5001
-   ```
+There are two ways to start the application:
+
+### Option 1: Start directly with Python
+```
+# Kill any existing process on port 5001 (if needed)
+lsof -ti:5001 | xargs kill -9 2>/dev/null || true
+
+# Activate virtual environment (if not already activated)
+source venv/bin/activate
+
+# Run the Flask app
+python app.py
+```
 
 ## Usage
 
