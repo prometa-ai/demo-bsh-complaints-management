@@ -3,7 +3,14 @@
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex align-items-center justify-content-between mb-4">
-        <h2 class="mb-0">Refrigerator Complaints</h2>
+        <div>
+            <h2 class="mb-0">Refrigerator Complaints</h2>
+            <div class="mt-2">
+                <a href="{{ url_for('batch_process_complaints') }}" class="btn btn-secondary">
+                    <i class="fas fa-sync"></i> Update AI Analysis
+                </a>
+            </div>
+        </div>
         <img src="{{ url_for('static', filename='images/bsh_logo.png') }}" alt="BSH Logo" style="height: 60px;">
     </div>
 

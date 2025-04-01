@@ -2,6 +2,7 @@ import os
 import json
 import psycopg2
 import getpass
+import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib
@@ -27,6 +28,38 @@ from dotenv import load_dotenv
 
 app = Flask(__name__)
 app.secret_key = 'bsh_complaint_management_key'
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Enable Flask debug mode
+app.debug = True
+
+# Load environment variables
+load_dotenv()
+
+# Print environment variables for debugging
+api_key = os.getenv("OPENAI_API_KEY")
+print(f"API key exists: {api_key is not None}")
+
+# Initialize OpenAI client
+client = None
+try:
+    # Import just what we need
+    from openai import OpenAI
+    print(f"OpenAI library version: {openai.__version__}")
+    
+    # Use environment variable approach which is more stable
+    os.environ["OPENAI_API_KEY"] = api_key
+    client = OpenAI()  # Uses the environment variable by default
+    print("OpenAI client initialized successfully")
+    
+except Exception as e:
+    print(f"Error initializing OpenAI client: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Define category colors globally
 category_colors = {
@@ -60,14 +93,13 @@ def nl2br(value):
 app.jinja_env.globals.update(max=max, min=min)
 
 # Load environment variables (you'll need to create a .env file with your OpenAI API key)
-load_dotenv()
+# Removing duplicate load_dotenv() call
 
-# Initialize OpenAI client
+# Initialize OpenAI client - Removing duplicate client initialization
 if os.getenv("OPENAI_API_KEY"):
     try:
-        # Set the API key directly
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        print("OpenAI configuration initialized")
+        # No need to create a new client - use the global 'client' variable initialized above
+        print("Using global client variable initialized above")
     except Exception as e:
         print(f"Error initializing OpenAI configuration: {e}")
 else:
@@ -896,6 +928,8 @@ def setup_technical_notes_table():
 
 # Generate AI analysis based on complaint and technical notes
 def generate_ai_analysis(complaint_data, technical_notes):
+    global client  # Use the global client variable initialized at the top of the file
+    
     # Extract keywords from customer complaint for better matching
     problem_types = complaint_data['complaintDetails']['natureOfProblem']
     customer_description = complaint_data['complaintDetails']['detailedDescription'].lower()
@@ -1123,141 +1157,138 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
             "Consider design improvements to isolate the lighting circuit from fan motor voltage fluctuations"
         ]
     
-    # If OpenAI API key is not configured or if we're testing, return default response
-    if not openai.api_key:
-        print("No OpenAI API key available, returning default response")
+    # If OpenAI client is not initialized, return default response
+    global client  # Use the global client variable that was initialized at the top of the file
+    if client is None:
+        print("OpenAI client not initialized, returning default response")
         return default_response
         
     try:
         print("Attempting to call OpenAI API...")
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": f"""You are the senior technical quality analyst for BSH Home Appliances (Bosch, Siemens, Gaggenau). 
-                
-                MOST IMPORTANT: Your analysis MUST correspond to both the customer's complaint and the technician's findings, addressing any inconsistencies.
-                
-                Based on preliminary analysis, this issue appears to be: {final_category}
-                
-                {consistency_note}
-                
-                Your task is to provide a HIGHLY SPECIFIC and TECHNICAL analysis focused primarily on the actual technical issue. You must connect the customer's complaint with the technician's findings.
-                
-                YOU MUST use one of these EXACT CATEGORIES in your analysis:
-                - NOISY GAS INJECTION
-                - COMPRESSOR NOISE ISSUE
-                - COMPRESSOR NOT COOLING
-                - DIGITAL PANEL MALFUNCTION
-                - LIGHTING ISSUES
-                - DOOR SEAL FAILURE
-                - ICE MAKER FAILURE
-                - REFRIGERANT LEAK
-                - EVAPORATOR FAN MALFUNCTION
-                - DEFROST SYSTEM FAILURE
-                - WATER DISPENSER PROBLEM
-                - DRAINAGE SYSTEM CLOG
-                - OTHER ISSUES
-                
-                Each analysis must include:
-                
-                1. A final opinion that specifically identifies the exact technical issue found by the technician and explains how it relates to the customer's complaint
-                2. Technical diagnosis with EXACT references to:
-                   - Specific components involved in the issue
-                   - Precise error codes and their technical meaning
-                   - Exact measurements, tolerances, and specifications
-                3. Root cause determination that explains the physics/electronics of WHY the specific component failed
-                4. Solution details with exact part numbers, replacement procedures, and technical fixes
-                5. Assessment of whether this indicates a design flaw, manufacturing defect, or isolated incident
-                
-                Organize your highly technical response with these labels:
-                - FINAL OPINION: (Identify the technical issue with model-specific details and address any inconsistency)
-                - CATEGORY: (Choose ONE category from the list above that best matches your analysis)
-                - TECHNICAL DIAGNOSIS: (Detailed technical assessment with component-level analysis)
-                - ROOT CAUSE: (Engineering explanation of the specific failure mechanism)
-                - SOLUTION IMPLEMENTED: (Detailed technical repair procedures performed)
-                - SYSTEMIC ASSESSMENT: (Engineering analysis of whether this indicates a design/manufacturing issue)
-                - RECOMMENDATIONS: (Specific technical actions including test procedures and exact replacement parts)
-                
-                You MUST be highly detailed and technical, using engineering terminology appropriate for BSH quality engineers."""},
-                {"role": "user", "content": f"Provide a highly technical quality analysis for this refrigerator case:\n\n### COMPLAINT INFORMATION:\n{complaint_summary}\n\n### TECHNICAL ASSESSMENT AND SERVICE NOTES:\n{tech_notes_summary or 'No technical notes available yet.'}"}
-            ]
-        )
-        print("OpenAI API call successful")
         
-        # Extract the AI-generated content
-        ai_text = response.choices[0].message.content
-        
-        # Extract sections (more robust parsing)
-        final_opinion = ""
-        openai_category = None  # Initialize OpenAI's category prediction
-        technical_diagnosis = ""
-        root_cause = ""
-        solution_implemented = ""
-        systemic_assessment = ""
-        recommendations = []
-        
-        sections = ai_text.split('\n\n')
-        for section in sections:
-            if "FINAL OPINION:" in section:
-                final_opinion = section.replace("FINAL OPINION:", "").strip()
-            elif "CATEGORY:" in section:
-                # Extract OpenAI's category prediction
-                category_text = section.replace("CATEGORY:", "").strip()
-                # Clean up the category text and remove any notes about inconsistency
-                if "(INCONSISTENT" in category_text:
-                    openai_category = category_text[:category_text.find("(INCONSISTENT")].strip()
-                else:
-                    openai_category = category_text.strip()
-                print(f"Extracted OpenAI category: {openai_category}")  # Debug print
-            elif "TECHNICAL DIAGNOSIS:" in section:
-                technical_diagnosis = section.replace("TECHNICAL DIAGNOSIS:", "").strip()
-            elif "ROOT CAUSE:" in section:
-                root_cause = section.replace("ROOT CAUSE:", "").strip()
-            elif "SOLUTION IMPLEMENTED:" in section:
-                solution_implemented = section.replace("SOLUTION IMPLEMENTED:", "").strip()
-            elif "SYSTEMIC ASSESSMENT:" in section:
-                systemic_assessment = section.replace("SYSTEMIC ASSESSMENT:", "").strip()
-            elif "RECOMMENDATIONS:" in section:
-                rec_text = section.replace("RECOMMENDATIONS:", "").strip()
-                rec_lines = rec_text.split('\n')
-                for line in rec_lines:
-                    clean_line = line.strip()
-                    if clean_line.startswith('-') or clean_line.startswith('•'):
-                        recommendations.append(clean_line[1:].strip())
-                    elif len(clean_line) > 0:
-                        recommendations.append(clean_line)
-        
-        # Ensure we have detailed component-specific information that matches both findings
-        if not final_opinion or (has_inconsistency and "inconsisten" not in final_opinion.lower()):
-            # If we don't have a good match, use our default opinion
-            final_opinion = default_response["final_opinion"]
+        # Create a clear summary of the complaint and technical notes
+        complaint_summary = f"""
+Customer Complaint:
+- Nature of Problem: {', '.join(problem_types)}
+- Detailed Description: {customer_description}
+- First Occurred: {complaint_data['complaintDetails']['problemFirstOccurrence']}
+- Frequency: {complaint_data['complaintDetails']['frequency']}
+- Environmental Conditions: Room Temp: {complaint_data['environmentalConditions']['roomTemperature']}, Ventilation: {complaint_data['environmentalConditions']['ventilation']}
+"""
+
+        tech_notes_summary = ""
+        if technical_notes:
+            tech_notes_summary = "Technical Assessment Notes:\n"
+            for note_id, complaint_id, note_data in technical_notes:
+                tech_notes_summary += f"""
+Visit Date: {note_data.get('visitDate', 'N/A')}
+Components Inspected: {', '.join(note_data['technicalAssessment']['componentInspected'])}
+Fault Diagnosis: {note_data['technicalAssessment']['faultDiagnosis']}
+Root Cause: {note_data['technicalAssessment']['rootCause']}
+Solution Proposed: {note_data['technicalAssessment']['solutionProposed']}
+Parts Replaced: {', '.join(note_data.get('partsReplaced', []))}
+Repair Details: {note_data.get('repairDetails', 'N/A')}
+"""
+
+        messages = [
+            {"role": "system", "content": f"""You are a technical quality analyst for BSH Home Appliances specializing in refrigerator complaint categorization.
+
+Your task is to analyze customer complaints and technical assessments to categorize each case into EXACTLY ONE of these predefined categories:
+
+{', '.join(category_colors.keys())}
+
+Guidelines for categorization:
+1. Consider both the customer's description and technician's findings
+2. If there's a discrepancy, prioritize the technician's diagnosis
+3. Look for specific symptoms, components, and repair patterns
+4. Consider the relationship between symptoms and root causes
+5. Use 'OTHER ISSUES' only if no other category clearly fits
+
+For each case, provide:
+1. CATEGORY: Choose exactly one category from the list
+2. JUSTIFICATION: Brief technical explanation of why this category best fits
+3. CONFIDENCE: High/Medium/Low and explanation of any uncertainty
+
+Remember:
+- Categories must match EXACTLY (including capitalization)
+- Focus on the primary issue if multiple problems exist
+- Consider both direct symptoms and underlying causes
+- If technical notes exist, they should heavily influence the categorization"""},
+            {"role": "user", "content": f"""Please categorize this refrigerator complaint case:
+
+{complaint_summary}
+
+{tech_notes_summary}
+
+Based on preliminary analysis, this issue appears to be: {final_category}
+
+Provide your categorization in this format:
+CATEGORY: (one of the predefined categories)
+JUSTIFICATION: (technical explanation)
+CONFIDENCE: (level and explanation)"""}
+        ]
+
+        try:
+            # Use the v1.0.0+ client approach
+            print("Using modern OpenAI client (v1.0.0+)")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                temperature=0,
+                messages=messages
+            )
+            ai_text = response.choices[0].message.content
                 
-        analysis = {
-            "final_opinion": final_opinion if final_opinion else default_response["final_opinion"],
-            "rule_based_category": final_category,  # Our rule-based category
-            "openai_category": openai_category,  # OpenAI's predicted category
-            "technical_diagnosis": technical_diagnosis if technical_diagnosis else default_response["technical_diagnosis"],
-            "root_cause": root_cause if root_cause else default_response["root_cause"],
-            "solution_implemented": solution_implemented if solution_implemented else default_response["solution_implemented"],
-            "systemic_assessment": systemic_assessment if systemic_assessment else default_response["systemic_assessment"],
-            "recommendations": recommendations if recommendations else default_response["recommendations"]
-        }
-                
-        return analysis
-        
+            print("OpenAI API call successful")
+            print(f"Response: {ai_text[:100]}...")
+            
+            # Parse the response to extract the category
+            openai_category = None
+            sections = ai_text.split('\n')
+            for section in sections:
+                if section.startswith('CATEGORY:'):
+                    category_text = section.replace('CATEGORY:', '').strip()
+                    # Clean up the category text
+                    if '(' in category_text:
+                        category_text = category_text[:category_text.find('(')].strip()
+                    openai_category = category_text
+                    break
+            
+            print(f"Extracted OpenAI category: {openai_category}")
+            
+            # Use the existing default_response structure but update with OpenAI's category
+            analysis = {
+                "final_opinion": final_opinion,
+                "rule_based_category": final_category,
+                "openai_category": openai_category,
+                "technical_diagnosis": technical_diagnosis,
+                "root_cause": default_response["root_cause"],
+                "solution_implemented": default_response["solution_implemented"],
+                "systemic_assessment": default_response["systemic_assessment"],
+                "recommendations": default_response["recommendations"]
+            }
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"Error in OpenAI API call: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return default_response
+            
     except Exception as e:
-        print(f"Error generating AI analysis: {e}")
-        # Return our detailed default response with the category we determined
+        print(f"Error generating AI analysis: {str(e)}")
         return default_response
 
 # Routes
 @app.route('/')
 def index():
     """Redirect root to statistics page."""
+    logger.debug("Accessed index route, redirecting to statistics")
     return redirect(url_for('statistics'))
 
 @app.route('/complaints')
 def list_complaints():
+    logger.debug("Accessed complaints listing route")
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '')
     time_period = request.args.get('time_period')
@@ -1787,6 +1818,77 @@ def statistics():
         flash('An error occurred while loading statistics.', 'error')
         return redirect(url_for('index'))
 
+@app.route('/batch_process_complaints')
+def batch_process_complaints():
+    """Process all complaints with technical notes to generate OpenAI predictions."""
+    logger.debug("Accessed batch_process_complaints route")
+    try:
+        logger.debug("Connecting to database...")
+        conn = connect_to_db()
+        cursor = conn.cursor()
+        
+        # Get all complaints that have technical notes
+        logger.debug("Fetching complaints with technical notes...")
+        cursor.execute("""
+            SELECT DISTINCT c.id, c.data 
+            FROM complaints c
+            INNER JOIN technical_notes tn ON c.id = tn.complaint_id
+            ORDER BY c.id
+        """)
+        complaints = cursor.fetchall()
+        logger.debug(f"Found {len(complaints)} complaints with technical notes")
+        
+        processed_count = 0
+        total_complaints = len(complaints)
+        
+        for complaint_id, complaint_data in complaints:
+            try:
+                # Get technical notes for this complaint
+                cursor.execute("""
+                    SELECT id, complaint_id, data 
+                    FROM technical_notes 
+                    WHERE complaint_id = %s 
+                    ORDER BY data->>'visitDate' DESC
+                """, (complaint_id,))
+                technical_notes = cursor.fetchall()
+                
+                # Generate AI analysis
+                ai_analysis = generate_ai_analysis(complaint_data, technical_notes)
+                
+                # Update the most recent technical note with the new AI analysis
+                if technical_notes:
+                    latest_note_id = technical_notes[0][0]
+                    latest_note_data = technical_notes[0][2]
+                    
+                    # Update the AI analysis in the note data
+                    latest_note_data['ai_analysis'] = ai_analysis
+                    
+                    # Save the updated note data
+                    cursor.execute("""
+                        UPDATE technical_notes 
+                        SET data = %s 
+                        WHERE id = %s
+                    """, (json.dumps(latest_note_data), latest_note_id))
+                    
+                    processed_count += 1
+                    print(f"Processed complaint {complaint_id} ({processed_count}/{total_complaints})")
+                
+            except Exception as e:
+                print(f"Error processing complaint {complaint_id}: {str(e)}")
+                continue
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash(f'Successfully processed {processed_count} complaints with technical notes.', 'success')
+        return redirect(url_for('list_complaints'))
+        
+    except Exception as e:
+        print(f"Error in batch processing: {str(e)}")
+        flash(f'Error processing complaints: {str(e)}', 'danger')
+        return redirect(url_for('list_complaints'))
+
 if __name__ == '__main__':
     # Ensure templates directory exists
     if not os.path.exists('templates'):
@@ -1794,4 +1896,6 @@ if __name__ == '__main__':
     
     # Setup technical notes table if it doesn't exist
     setup_technical_notes_table()
-    app.run(debug=True, port=5001) 
+    
+    # Disable reloader and use threaded=True to avoid hanging issues
+    app.run(host='127.0.0.1', port=5005, debug=False, use_reloader=False, threaded=True) 
