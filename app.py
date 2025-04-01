@@ -213,11 +213,18 @@ def get_problem_distribution():
         SELECT 
             c.id,
             COALESCE(
-                (SELECT data->>'category' 
-                FROM technical_notes tn 
-                WHERE tn.complaint_id = c.id 
-                ORDER BY tn.id DESC 
-                LIMIT 1),
+                (
+                    SELECT 
+                        CASE 
+                            WHEN data->>'category' LIKE '%INCONSISTENT%' THEN 
+                                SUBSTRING(data->>'category' FROM 1 FOR POSITION(' (INCONSISTENT' in data->>'category') - 1)
+                            ELSE data->>'category'
+                        END
+                    FROM technical_notes tn 
+                    WHERE tn.complaint_id = c.id 
+                    ORDER BY tn.id DESC 
+                    LIMIT 1
+                ),
                 'Pending Analysis'
             ) as category
         FROM complaints c
@@ -761,6 +768,20 @@ def add_technical_note(complaint_id, note_data):
     """Add a technical note for a specific complaint."""
     conn = connect_to_db()
     cursor = conn.cursor()
+    
+    # Get complaint data to generate AI analysis
+    cursor.execute("SELECT data FROM complaints WHERE id = %s", (complaint_id,))
+    complaint_data = cursor.fetchone()[0]
+    
+    # Get existing technical notes
+    cursor.execute("SELECT id, complaint_id, data FROM technical_notes WHERE complaint_id = %s", (complaint_id,))
+    existing_notes = cursor.fetchall()
+    
+    # Generate AI analysis
+    ai_analysis = generate_ai_analysis(complaint_data, existing_notes)
+    
+    # Add the AI analysis to the note data
+    note_data['ai_analysis'] = ai_analysis
     
     # First, add the technical note
     cursor.execute("""
@@ -1499,15 +1520,32 @@ def statistics():
 
         # Get problem distribution for the selected time period
         cursor.execute(f"""
-        WITH ai_categories AS (
+        WITH technical_categories AS (
             SELECT 
                 c.id,
                 COALESCE(
-                    (SELECT data->>'category' 
-                    FROM technical_notes tn 
-                    WHERE tn.complaint_id = c.id 
-                    ORDER BY tn.id DESC 
-                    LIMIT 1),
+                    (
+                        SELECT 
+                            CASE 
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%noise%' AND data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%gas%' THEN 'NOISY GAS INJECTION'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%compressor%' AND data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%noise%' THEN 'COMPRESSOR NOISE ISSUE'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%compressor%' AND data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%cool%' THEN 'COMPRESSOR NOT COOLING'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%panel%' OR data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%display%' THEN 'DIGITAL PANEL MALFUNCTION'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%light%' OR data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%bulb%' THEN 'LIGHTING ISSUES'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%door%' OR data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%seal%' THEN 'DOOR SEAL FAILURE'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%ice%maker%' THEN 'ICE MAKER FAILURE'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%leak%' AND data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%refrigerant%' THEN 'REFRIGERANT LEAK'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%fan%' OR data->'technicalAssessment'->'componentInspected' ? 'Fan Motor' OR data->'technicalAssessment'->'componentInspected' ? 'Evaporator Fan' THEN 'EVAPORATOR FAN MALFUNCTION'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%defrost%' OR data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%frost%' THEN 'DEFROST SYSTEM FAILURE'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%water%' AND data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%dispenser%' THEN 'WATER DISPENSER PROBLEM'
+                                WHEN data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%drain%' OR data->'technicalAssessment'->>'faultDiagnosis' ILIKE '%clog%' THEN 'DRAINAGE SYSTEM CLOG'
+                                ELSE 'OTHER ISSUES'
+                            END
+                        FROM technical_notes tn 
+                        WHERE tn.complaint_id = c.id 
+                        ORDER BY tn.id DESC 
+                        LIMIT 1
+                    ),
                     'Pending Analysis'
                 ) as category
             FROM complaints c
@@ -1517,10 +1555,11 @@ def statistics():
         )
         SELECT 
             category,
-            COUNT(*) as count
-        FROM ai_categories
+            COUNT(*) as count,
+            ROUND((COUNT(*) * 100.0 / (SELECT COUNT(*) FROM technical_categories))::numeric, 1) as percentage
+        FROM technical_categories
         GROUP BY category
-        ORDER BY count DESC
+        ORDER BY count DESC;
         """)
         problem_distribution = cursor.fetchall()
 
@@ -1543,77 +1582,178 @@ def statistics():
 
         # Create interactive plots using Plotly
         # Problem Distribution Plot
-        problem_fig = px.pie(
-            values=[row[1] for row in problem_distribution],
-            names=[row[0] for row in problem_distribution],
-            title='Analysis Result Categories',
-            hole=0.4
-        )
-        problem_fig.update_layout(
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=500,
-            width=800,
-            margin=dict(t=50, b=50, l=50, r=50)
-        )
+        if problem_distribution and len(problem_distribution) > 0:
+            problem_fig = px.pie(
+                values=[row[1] for row in problem_distribution],
+                names=[row[0] for row in problem_distribution],
+                title='Analysis Result Categories',
+                hole=0.4,
+                labels={'label': 'Category', 'value': 'Count'}
+            )
+            problem_fig.update_layout(
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="right",
+                    x=1.2
+                ),
+                height=600,
+                width=900,
+                margin=dict(t=50, b=50, l=50, r=150),
+                annotations=[dict(
+                    text='Distribution of Analysis Result categories from technical assessments.<br>"Pending Analysis" indicates complaints without technical notes.',
+                    x=0.5,
+                    y=-0.2,
+                    showarrow=False,
+                    align='center'
+                )]
+            )
+            problem_fig.update_traces(
+                textposition='inside',
+                textinfo='percent+label',
+                insidetextorientation='radial'
+            )
+        else:
+            # Create an empty pie chart with a "No Data" message
+            problem_fig = go.Figure(go.Pie(
+                values=[1],
+                labels=['No Data'],
+                hole=0.4,
+                textinfo='label'
+            ))
+            problem_fig.update_layout(
+                title='Analysis Result Categories',
+                height=600,
+                width=900,
+                showlegend=False,
+                annotations=[dict(
+                    text='No data available for the selected time period',
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    align='center'
+                )]
+            )
         problem_plot = json.dumps(problem_fig, cls=plotly.utils.PlotlyJSONEncoder)
 
         # Warranty Distribution Plot
-        warranty_fig = px.pie(
-            values=[row[1] for row in warranty_distribution],
-            names=[row[0] for row in warranty_distribution],
-            title='Warranty Status Distribution',
-            hole=0.4
-        )
-        warranty_fig.update_layout(
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            height=500,
-            width=800,
-            margin=dict(t=50, b=50, l=50, r=50)
-        )
+        if warranty_distribution and len(warranty_distribution) > 0:
+            warranty_fig = px.pie(
+                values=[row[1] for row in warranty_distribution],
+                names=[row[0] for row in warranty_distribution],
+                title='Warranty Status Distribution',
+                hole=0.4
+            )
+            warranty_fig.update_layout(
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                height=500,
+                width=800,
+                margin=dict(t=50, b=50, l=50, r=50)
+            )
+        else:
+            # Create an empty pie chart with a "No Data" message
+            warranty_fig = go.Figure(go.Pie(
+                values=[1],
+                labels=['No Data'],
+                hole=0.4,
+                textinfo='label'
+            ))
+            warranty_fig.update_layout(
+                title='Warranty Status Distribution',
+                height=500,
+                width=800,
+                showlegend=False,
+                annotations=[dict(
+                    text='No data available for the selected time period',
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    align='center'
+                )]
+            )
         warranty_plot = json.dumps(warranty_fig, cls=plotly.utils.PlotlyJSONEncoder)
 
         # Daily Trend Plot
-        daily_dates = [row[0] for row in get_complaints_by_timeframe(start_date, end_date)]
-        daily_counts = [row[1] for row in get_complaints_by_timeframe(start_date, end_date)]
-        daily_fig = go.Figure()
-        daily_fig.add_trace(go.Scatter(
-            x=daily_dates,
-            y=daily_counts,
-            mode='lines+markers',
-            name='Daily Complaints'
-        ))
-        daily_fig.update_layout(
-            title='Daily Complaint Trends',
-            xaxis_title='Date',
-            yaxis_title='Number of Complaints',
-            showlegend=True,
-            height=500,
-            width=800,
-            margin=dict(t=50, b=50, l=50, r=50)
-        )
+        daily_data = get_complaints_by_timeframe(start_date, end_date)
+        if daily_data and len(daily_data) > 0:
+            daily_dates = [row[0] for row in daily_data]
+            daily_counts = [row[1] for row in daily_data]
+            daily_fig = go.Figure()
+            daily_fig.add_trace(go.Scatter(
+                x=daily_dates,
+                y=daily_counts,
+                mode='lines+markers',
+                name='Daily Complaints'
+            ))
+            daily_fig.update_layout(
+                title='Daily Complaint Trends',
+                xaxis_title='Date',
+                yaxis_title='Number of Complaints',
+                showlegend=True,
+                height=500,
+                width=800,
+                margin=dict(t=50, b=50, l=50, r=50)
+            )
+        else:
+            daily_fig = go.Figure()
+            daily_fig.update_layout(
+                title='Daily Complaint Trends',
+                xaxis_title='Date',
+                yaxis_title='Number of Complaints',
+                height=500,
+                width=800,
+                showlegend=False,
+                annotations=[dict(
+                    text='No data available for the selected time period',
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    align='center'
+                )]
+            )
         daily_plot = json.dumps(daily_fig, cls=plotly.utils.PlotlyJSONEncoder)
 
         # Monthly Trend Plot
-        monthly_dates = [row[0] for row in get_complaints_by_timeframe(start_date, end_date, timeframe='monthly')]
-        monthly_counts = [row[1] for row in get_complaints_by_timeframe(start_date, end_date, timeframe='monthly')]
-        monthly_fig = go.Figure()
-        monthly_fig.add_trace(go.Scatter(
-            x=monthly_dates,
-            y=monthly_counts,
-            mode='lines+markers',
-            name='Monthly Complaints'
-        ))
-        monthly_fig.update_layout(
-            title='Monthly Complaint Trends',
-            xaxis_title='Date',
-            yaxis_title='Number of Complaints',
-            showlegend=True,
-            height=500,
-            width=800,
-            margin=dict(t=50, b=50, l=50, r=50)
-        )
+        monthly_data = get_complaints_by_timeframe(start_date, end_date, timeframe='monthly')
+        if monthly_data and len(monthly_data) > 0:
+            monthly_dates = [row[0] for row in monthly_data]
+            monthly_counts = [row[1] for row in monthly_data]
+            monthly_fig = go.Figure()
+            monthly_fig.add_trace(go.Scatter(
+                x=monthly_dates,
+                y=monthly_counts,
+                mode='lines+markers',
+                name='Monthly Complaints'
+            ))
+            monthly_fig.update_layout(
+                title='Monthly Complaint Trends',
+                xaxis_title='Date',
+                yaxis_title='Number of Complaints',
+                showlegend=True,
+                height=500,
+                width=800,
+                margin=dict(t=50, b=50, l=50, r=50)
+            )
+        else:
+            monthly_fig = go.Figure()
+            monthly_fig.update_layout(
+                title='Monthly Complaint Trends',
+                xaxis_title='Date',
+                yaxis_title='Number of Complaints',
+                height=500,
+                width=800,
+                showlegend=False,
+                annotations=[dict(
+                    text='No data available for the selected time period',
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    align='center'
+                )]
+            )
         monthly_plot = json.dumps(monthly_fig, cls=plotly.utils.PlotlyJSONEncoder)
 
         cursor.close()
