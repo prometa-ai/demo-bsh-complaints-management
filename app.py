@@ -1644,8 +1644,8 @@ def statistics():
                 names=[row[0] for row in problem_distribution],
                 title='Analysis Result Categories',
                 hole=0.4,
-                color=[row[0] for row in problem_distribution],  # Use categories for color mapping
-                color_discrete_map=category_colors,  # Map categories to their exact colors
+                color=[row[0] for row in problem_distribution],
+                color_discrete_map=category_colors,
                 labels={'label': 'Category', 'value': 'Count'}
             )
             problem_fig.update_layout(
@@ -1672,7 +1672,7 @@ def statistics():
                 textposition='inside',
                 textinfo='label+value',
                 insidetextorientation='radial',
-                hovertemplate='%{label}<br>Count: %{value}<extra></extra>'
+                hovertemplate='%{label}<br>Count: %{value}<br>Percentage: %{percent:.2%}<extra></extra>'
             )
             
             # Store the category colors in the app config for use in templates
