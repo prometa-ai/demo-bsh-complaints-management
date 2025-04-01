@@ -360,8 +360,24 @@
                         <h6>Final Opinion:</h6>
                         <p>{{ ai_analysis.final_opinion }}</p>
 
-                        <h6>Category:</h6>
-                        <p><span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(ai_analysis.category, '#808080') }}; color: white; font-size: 1rem; padding: 0.5rem 1rem;">{{ ai_analysis.category }}</span></p>
+                        <h3>Categories:</h3>
+                        <div class="mb-3">
+                            <div class="mb-2">
+                                <strong>Rule-based Analysis:</strong>
+                                <div class="mt-1">
+                                    <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(ai_analysis.rule_based_category, '#808080') }}; color: white; font-size: 1rem; padding: 0.5rem 1rem;">{{ ai_analysis.rule_based_category }}</span>
+                                </div>
+                            </div>
+                            
+                            {% if ai_analysis.openai_category %}
+                            <div class="mt-2">
+                                <strong>AI-Predicted Category:</strong>
+                                <div class="mt-1">
+                                    <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(ai_analysis.openai_category, '#808080') }}; color: white; font-size: 1rem; padding: 0.5rem 1rem;">{{ ai_analysis.openai_category }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
 
                         <h6>Technical Diagnosis:</h6>
                         <p>{{ ai_analysis.technical_diagnosis|nl2br }}</p>

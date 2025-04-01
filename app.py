@@ -23,7 +23,6 @@ from markupsafe import Markup
 
 # Import OpenAI for AI analysis
 import openai
-from openai import OpenAI
 from dotenv import load_dotenv
 
 app = Flask(__name__)
@@ -63,19 +62,16 @@ app.jinja_env.globals.update(max=max, min=min)
 # Load environment variables (you'll need to create a .env file with your OpenAI API key)
 load_dotenv()
 
-# Configure OpenAI client only if API key is available
-client = None
+# Initialize OpenAI client
 if os.getenv("OPENAI_API_KEY"):
     try:
-        # Fix: Remove the problematic proxies parameter
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        # Create a clean client without extra parameters
-        client = OpenAI(
-            api_key=openai_api_key
-        )
-        print(f"OpenAI client initialized successfully")
+        # Set the API key directly
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        print("OpenAI configuration initialized")
     except Exception as e:
-        print(f"Error initializing OpenAI client: {e}")
+        print(f"Error initializing OpenAI configuration: {e}")
+else:
+    print("No OpenAI API key found")
 
 # Helper functions
 def connect_to_db():
@@ -1101,7 +1097,8 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
     # Default response with the determined category and final opinion
     default_response = {
         "final_opinion": final_opinion,
-        "category": final_category,
+        "rule_based_category": final_category,  # Renamed from category to rule_based_category
+        "openai_category": None,  # New field for OpenAI's prediction
         "technical_diagnosis": technical_diagnosis,
         "root_cause": "Analysis of component-specific failure is needed. Refer to the technical assessment notes for initial diagnosis.",
         "solution_implemented": "See technician notes for implemented solution details.",
@@ -1127,91 +1124,13 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
         ]
     
     # If OpenAI API key is not configured or if we're testing, return default response
-    if not os.getenv("OPENAI_API_KEY"):
+    if not openai.api_key:
+        print("No OpenAI API key available, returning default response")
         return default_response
         
     try:
-        # Create a clean OpenAI client without problematic parameters
-        api_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        
-        # Prepare the data for the AI model
-        complaint_summary = f"""
-        Customer: {complaint_data['customerInformation']['fullName']}
-        Product: {complaint_data['productInformation']['modelNumber']}
-        Serial Number: {complaint_data['productInformation']['serialNumber']}
-        Purchase Date: {complaint_data['productInformation']['dateOfPurchase']}
-        Warranty Status: {complaint_data['warrantyInformation']['warrantyStatus']}
-        Warranty Expiration: {complaint_data['warrantyInformation']['warrantyExpirationDate']}
-        Problem Types: {', '.join(complaint_data['complaintDetails']['natureOfProblem'])}
-        Problem Description: {complaint_data['complaintDetails']['detailedDescription']}
-        Date First Occurred: {complaint_data['complaintDetails']['problemFirstOccurrence']}
-        Frequency: {complaint_data['complaintDetails']['frequency']}
-        Environmental Conditions: 
-        - Room Temperature: {complaint_data['environmentalConditions']['roomTemperature']}
-        - Ventilation: {complaint_data['environmentalConditions']['ventilation']}
-        - Recent Changes: {complaint_data['environmentalConditions']['recentEnvironmentalChanges']}
-        Customer Service Notes: {complaint_data['serviceRepresentativeNotes']['initialAssessment']}
-        Immediate Actions Taken: {complaint_data['serviceRepresentativeNotes']['immediateActionsTaken']}
-        Service Rep Recommendations: {complaint_data['serviceRepresentativeNotes']['recommendations']}
-        """
-        
-        tech_notes_summary = ""
-        if technical_notes:
-            for i, (_, _, note_data) in enumerate(technical_notes):
-                tech_notes_summary += f"""
-                --- TECHNICAL NOTE {i+1} ---
-                Technician: {note_data.get('technicianName', 'Unknown')}
-                Visit Date: {note_data.get('visitDate', 'Unknown')}
-                
-                ERROR CODE/SYMPTOM CODE: {note_data.get('technicalAssessment', {}).get('faultDiagnosis', 'Not provided')}
-                
-                FAULTY PARTS:
-                Components Inspected: {', '.join(note_data.get('technicalAssessment', {}).get('componentInspected', ['None']))}
-                Parts Replaced: {', '.join(note_data.get('partsReplaced', ['None']))}
-                
-                Root Cause: {note_data.get('technicalAssessment', {}).get('rootCause', 'Not provided')}
-                Solution: {note_data.get('technicalAssessment', {}).get('solutionProposed', 'Not provided')}
-                
-                WORK EXECUTED: {note_data.get('repairDetails', 'Not provided')}
-                
-                Follow-up Required: {"Yes" if note_data.get('followUpRequired') else "No"}
-                Follow-up Notes: {note_data.get('followUpNotes', 'None')}
-                Customer Satisfaction: {note_data.get('customerSatisfaction', 'Not rated')} out of 5
-                """
-        
-        # Call OpenAI API with the most appropriate category and detailed prompt
-        consistency_note = ""
-        if has_inconsistency:
-            consistency_note = f"""
-            IMPORTANT: There is a SIGNIFICANT INCONSISTENCY between what the customer reported and what the technician found.
-            
-            Customer reported: {customer_category}
-            Technician found: {tech_category}
-            
-            Your analysis MUST address this inconsistency and explain:
-            1. Why the customer might perceive the issue differently than the technical reality
-            2. How the technical issue identified could cause the symptoms the customer described
-            3. What this means for the repair approach
-            """
-            
-            # Enhanced consistency note for the lighting vs fan motor case
-            if "LIGHT" in customer_category and "FAN" in tech_category:
-                consistency_note = f"""
-                IMPORTANT: There is a specific type of inconsistency between what the customer reported (lighting issues) and what the technician found (fan motor problems).
-                
-                Customer reported: {customer_category}
-                Technician found: {tech_category}
-                
-                This is a common case in BSH-R8480 models where fan motor electrical issues cause lighting problems. Your analysis MUST:
-                
-                1. Explain the electrical connection between the fan motor circuit and lighting system in this model
-                2. Detail how moisture-related fan motor issues can cause voltage fluctuations affecting lights
-                3. Clarify why replacing the fan motor is the correct solution rather than just replacing lights
-                4. Provide guidance on explaining this technical relationship to the customer
-                5. Recommend design improvements to prevent this issue in future models
-                """
-        
-        response = api_client.chat.completions.create(
+        print("Attempting to call OpenAI API...")
+        response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": f"""You are the senior technical quality analyst for BSH Home Appliances (Bosch, Siemens, Gaggenau). 
@@ -1224,7 +1143,20 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
                 
                 Your task is to provide a HIGHLY SPECIFIC and TECHNICAL analysis focused primarily on the actual technical issue. You must connect the customer's complaint with the technician's findings.
                 
-                YOU MUST use this EXACT CATEGORY in your analysis: {final_category}
+                YOU MUST use one of these EXACT CATEGORIES in your analysis:
+                - NOISY GAS INJECTION
+                - COMPRESSOR NOISE ISSUE
+                - COMPRESSOR NOT COOLING
+                - DIGITAL PANEL MALFUNCTION
+                - LIGHTING ISSUES
+                - DOOR SEAL FAILURE
+                - ICE MAKER FAILURE
+                - REFRIGERANT LEAK
+                - EVAPORATOR FAN MALFUNCTION
+                - DEFROST SYSTEM FAILURE
+                - WATER DISPENSER PROBLEM
+                - DRAINAGE SYSTEM CLOG
+                - OTHER ISSUES
                 
                 Each analysis must include:
                 
@@ -1239,7 +1171,7 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
                 
                 Organize your highly technical response with these labels:
                 - FINAL OPINION: (Identify the technical issue with model-specific details and address any inconsistency)
-                - CATEGORY: {final_category}
+                - CATEGORY: (Choose ONE category from the list above that best matches your analysis)
                 - TECHNICAL DIAGNOSIS: (Detailed technical assessment with component-level analysis)
                 - ROOT CAUSE: (Engineering explanation of the specific failure mechanism)
                 - SOLUTION IMPLEMENTED: (Detailed technical repair procedures performed)
@@ -1250,13 +1182,14 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
                 {"role": "user", "content": f"Provide a highly technical quality analysis for this refrigerator case:\n\n### COMPLAINT INFORMATION:\n{complaint_summary}\n\n### TECHNICAL ASSESSMENT AND SERVICE NOTES:\n{tech_notes_summary or 'No technical notes available yet.'}"}
             ]
         )
+        print("OpenAI API call successful")
         
         # Extract the AI-generated content
         ai_text = response.choices[0].message.content
         
         # Extract sections (more robust parsing)
         final_opinion = ""
-        category = final_category  # Default to our pre-determined category
+        openai_category = None  # Initialize OpenAI's category prediction
         technical_diagnosis = ""
         root_cause = ""
         solution_implemented = ""
@@ -1268,10 +1201,14 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
             if "FINAL OPINION:" in section:
                 final_opinion = section.replace("FINAL OPINION:", "").strip()
             elif "CATEGORY:" in section:
-                # Only use AI category if it's not empty, otherwise keep our default
-                ai_category = section.replace("CATEGORY:", "").strip()
-                if ai_category:
-                    category = ai_category
+                # Extract OpenAI's category prediction
+                category_text = section.replace("CATEGORY:", "").strip()
+                # Clean up the category text and remove any notes about inconsistency
+                if "(INCONSISTENT" in category_text:
+                    openai_category = category_text[:category_text.find("(INCONSISTENT")].strip()
+                else:
+                    openai_category = category_text.strip()
+                print(f"Extracted OpenAI category: {openai_category}")  # Debug print
             elif "TECHNICAL DIAGNOSIS:" in section:
                 technical_diagnosis = section.replace("TECHNICAL DIAGNOSIS:", "").strip()
             elif "ROOT CAUSE:" in section:
@@ -1297,7 +1234,8 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
                 
         analysis = {
             "final_opinion": final_opinion if final_opinion else default_response["final_opinion"],
-            "category": category,
+            "rule_based_category": final_category,  # Our rule-based category
+            "openai_category": openai_category,  # OpenAI's predicted category
             "technical_diagnosis": technical_diagnosis if technical_diagnosis else default_response["technical_diagnosis"],
             "root_cause": root_cause if root_cause else default_response["root_cause"],
             "solution_implemented": solution_implemented if solution_implemented else default_response["solution_implemented"],
