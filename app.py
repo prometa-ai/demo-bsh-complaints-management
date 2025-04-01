@@ -43,26 +43,29 @@ load_dotenv()
 # Print environment variables for debugging
 api_key = os.getenv("OPENAI_API_KEY")
 print(f"API key exists: {api_key is not None}")
+print(f"API key length: {len(api_key) if api_key else 'None'}")
+print(f"API key first 10 chars: {api_key[:10] + '...' if api_key else 'None'}")
 
 # Initialize OpenAI client
 client = None
 try:
     # Import just what we need
     from openai import OpenAI
+    import openai
     print(f"OpenAI library version: {openai.__version__}")
     
-    # Use environment variable approach which is more stable
+    # Clear any proxy settings that might interfere
+    for env_var in list(os.environ.keys()):
+        if 'proxy' in env_var.lower() or 'proxy' in os.environ.get(env_var, '').lower():
+            print(f"Removing proxy environment variable: {env_var}")
+            del os.environ[env_var]
+    
+    # Set API key in environment
     os.environ["OPENAI_API_KEY"] = api_key
     
-    try:
-        # Initialize without any extra parameters to avoid proxy settings
-        client = OpenAI(api_key=api_key)
-        print("OpenAI client initialized successfully with explicit api_key")
-    except TypeError as te:
-        # Fall back to simpler initialization if there's a TypeError
-        print(f"Falling back to simpler initialization: {te}")
-        client = OpenAI()
-        print("OpenAI client initialized successfully with default parameters")
+    # Simple initialization without any parameters
+    client = OpenAI()
+    print("OpenAI client initialized successfully with environment variable")
     
 except Exception as e:
     print(f"Error initializing OpenAI client: {e}")
@@ -1169,11 +1172,19 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
     global client  # Use the global client variable that was initialized at the top of the file
     if client is None:
         print("OpenAI client not initialized, returning default response")
+        print("Current global client value:", client)
         return default_response
         
     try:
         print("Attempting to call OpenAI API...")
+        print(f"OpenAI client object: {type(client)}")
         
+        # Double-check API key availability
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("No API key found in environment, cannot make OpenAI call")
+            return default_response
+            
         # Create a clear summary of the complaint and technical notes
         complaint_summary = f"""
 Customer Complaint:
