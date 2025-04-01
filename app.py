@@ -18,6 +18,7 @@ import base64
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.utils
+import flask
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from markupsafe import Markup
@@ -1907,6 +1908,229 @@ def batch_process_complaints():
         print(f"Error in batch processing: {str(e)}")
         flash(f'Error processing complaints: {str(e)}', 'danger')
         return redirect(url_for('list_complaints'))
+
+@app.route('/complaints/export')
+def export_complaints():
+    """Export filtered complaints data to CSV."""
+    logger.debug("Accessed complaints export route")
+    
+    # Get the same filter parameters as the list_complaints route
+    search = request.args.get('search', '')
+    time_period = request.args.get('time_period')
+    has_notes = request.args.get('has_notes') == 'true'
+    
+    # Handle custom date range
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    if not time_period and start_date and end_date:
+        time_period = f"custom:{start_date}:{end_date}"
+    elif time_period and time_period.startswith('custom:'):
+        # Extract start and end dates from time_period
+        parts = time_period.split(':')
+        if len(parts) == 3:
+            start_date = parts[1]
+            end_date = parts[2]
+    
+    # Get all complaints without pagination
+    complaints, total_count = get_all_complaints(
+        page=1, 
+        items_per_page=10000,  # Set a high limit to get all complaints
+        search=search, 
+        time_period=time_period, 
+        has_notes=has_notes
+    )
+    
+    # Create CSV content
+    import csv
+    from io import StringIO
+    
+    # Create a StringIO object to hold the CSV data
+    csv_data = StringIO()
+    csv_writer = csv.writer(csv_data)
+    
+    # Write CSV header row with all the fields we want to export
+    header = [
+        # Basic complaint info
+        'Complaint ID',
+        'Date of Complaint',
+        
+        # Customer Information
+        'Customer Name',
+        'Customer Email',
+        'Customer Phone',
+        'Customer Address',
+        'Customer City',
+        'Customer State/Province',
+        'Customer Postal Code',
+        'Country',
+        
+        # Product Information
+        'Model Number',
+        'Serial Number',
+        'Date of Purchase',
+        'Place of Purchase',
+        
+        # Warranty Information
+        'Warranty Status',
+        'Warranty Expiration Date',
+        
+        # Complaint Details
+        'Nature of Problem',
+        'Detailed Description',
+        'Problem First Occurrence',
+        'Frequency',
+        'Repair Attempted',
+        'Repair Details',
+        'Resolution Status',
+        
+        # Environmental Conditions
+        'Room Temperature',
+        'Ventilation',
+        'Recent Environmental Changes',
+        
+        # Service Representative Notes
+        'Initial Assessment',
+        'Immediate Actions Taken',
+        'Recommendations',
+        
+        # Technical Assessment (most recent)
+        'Has Technical Notes',
+        'Technician Name',
+        'Visit Date',
+        'Components Inspected',
+        'Fault Diagnosis',
+        'Root Cause',
+        'Solution Proposed',
+        'Parts Replaced',
+        'Repair Details',
+        'Follow-Up Required',
+        'Follow-Up Notes',
+        'Customer Satisfaction',
+        
+        # AI Analysis
+        'AI Final Opinion',
+        'AI Category (Rule-Based)',
+        'AI Category (OpenAI)',
+        'AI Technical Diagnosis',
+        'AI Root Cause',
+        'AI Solution Implemented',
+        'AI Systemic Assessment',
+        'AI Recommendations'
+    ]
+    
+    csv_writer.writerow(header)
+    
+    # Write each complaint as a row in the CSV
+    for complaint_id, complaint_data, has_technical_notes in complaints:
+        try:
+            # Initialize row with empty values
+            row = [''] * len(header)
+            
+            # Set basic complaint info
+            row[0] = complaint_id
+            row[1] = complaint_data.get('complaintDetails', {}).get('dateOfComplaint', '').split('T')[0] if complaint_data.get('complaintDetails', {}).get('dateOfComplaint') else ''
+            
+            # Customer Information
+            customer_info = complaint_data.get('customerInformation', {})
+            row[2] = customer_info.get('fullName', '')
+            row[3] = customer_info.get('emailAddress', '')
+            row[4] = customer_info.get('phoneNumber', '')
+            row[5] = customer_info.get('address', '')
+            row[6] = customer_info.get('city', '')
+            row[7] = customer_info.get('stateProvince', '')
+            row[8] = customer_info.get('postalCode', '')
+            row[9] = customer_info.get('country', '')
+            
+            # Product Information
+            product_info = complaint_data.get('productInformation', {})
+            row[10] = product_info.get('modelNumber', '')
+            row[11] = product_info.get('serialNumber', '')
+            row[12] = product_info.get('dateOfPurchase', '')
+            row[13] = product_info.get('placeOfPurchase', '')
+            
+            # Warranty Information
+            warranty_info = complaint_data.get('warrantyInformation', {})
+            row[14] = warranty_info.get('warrantyStatus', '')
+            row[15] = warranty_info.get('warrantyExpirationDate', '')
+            
+            # Complaint Details
+            complaint_details = complaint_data.get('complaintDetails', {})
+            row[16] = ', '.join(complaint_details.get('natureOfProblem', [])) if isinstance(complaint_details.get('natureOfProblem'), list) else complaint_details.get('natureOfProblem', '')
+            row[17] = complaint_details.get('detailedDescription', '')
+            row[18] = complaint_details.get('problemFirstOccurrence', '')
+            row[19] = complaint_details.get('frequency', '')
+            row[20] = complaint_details.get('repairAttempted', '')
+            row[21] = complaint_details.get('repairDetails', '')
+            row[22] = complaint_details.get('resolutionStatus', '')
+            
+            # Environmental Conditions
+            env_conditions = complaint_data.get('environmentalConditions', {})
+            row[23] = env_conditions.get('roomTemperature', '')
+            row[24] = env_conditions.get('ventilation', '')
+            row[25] = env_conditions.get('recentEnvironmentalChanges', '')
+            
+            # Service Representative Notes
+            service_notes = complaint_data.get('serviceRepresentativeNotes', {})
+            row[26] = service_notes.get('initialAssessment', '')
+            row[27] = service_notes.get('immediateActionsTaken', '')
+            row[28] = service_notes.get('recommendations', '')
+            
+            # Get technical notes if available
+            technical_notes = None
+            ai_analysis = None
+            
+            if has_technical_notes:
+                # Set the flag for has technical notes
+                row[29] = 'Yes'
+                
+                # Get the latest technical note data
+                tech_notes = get_technical_notes(complaint_id)
+                if tech_notes:
+                    latest_note = tech_notes[0][2]  # Get data from the most recent note
+                    
+                    # Technical Assessment fields
+                    row[30] = latest_note.get('technicianName', '')
+                    row[31] = latest_note.get('visitDate', '')
+                    
+                    tech_assessment = latest_note.get('technicalAssessment', {})
+                    row[32] = ', '.join(tech_assessment.get('componentInspected', [])) if isinstance(tech_assessment.get('componentInspected'), list) else tech_assessment.get('componentInspected', '')
+                    row[33] = tech_assessment.get('faultDiagnosis', '')
+                    row[34] = tech_assessment.get('rootCause', '')
+                    row[35] = tech_assessment.get('solutionProposed', '')
+                    
+                    row[36] = ', '.join(latest_note.get('partsReplaced', [])) if isinstance(latest_note.get('partsReplaced'), list) else latest_note.get('partsReplaced', '')
+                    row[37] = latest_note.get('repairDetails', '')
+                    row[38] = 'Yes' if latest_note.get('followUpRequired') else 'No'
+                    row[39] = latest_note.get('followUpNotes', '')
+                    row[40] = latest_note.get('customerSatisfaction', '')
+                    
+                    # AI Analysis fields if available
+                    ai_analysis = latest_note.get('ai_analysis', {})
+                    if ai_analysis:
+                        row[41] = ai_analysis.get('final_opinion', '')
+                        row[42] = ai_analysis.get('rule_based_category', '')
+                        row[43] = ai_analysis.get('openai_category', '')
+                        row[44] = ai_analysis.get('technical_diagnosis', '')
+                        row[45] = ai_analysis.get('root_cause', '')
+                        row[46] = ai_analysis.get('solution_implemented', '')
+                        row[47] = ai_analysis.get('systemic_assessment', '')
+                        row[48] = '; '.join(ai_analysis.get('recommendations', [])) if isinstance(ai_analysis.get('recommendations'), list) else ai_analysis.get('recommendations', '')
+            else:
+                row[29] = 'No'
+            
+            # Write the row to the CSV
+            csv_writer.writerow(row)
+            
+        except Exception as e:
+            print(f"Error exporting complaint {complaint_id}: {e}")
+            continue
+    
+    # Prepare the response
+    response = flask.make_response(csv_data.getvalue())
+    response.headers["Content-Disposition"] = f"attachment; filename=complaints_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    response.headers["Content-type"] = "text/csv"
+    
+    return response
 
 if __name__ == '__main__':
     # Ensure templates directory exists

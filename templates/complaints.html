@@ -9,6 +9,16 @@
                 <a href="{{ url_for('batch_process_complaints') }}" class="btn btn-secondary">
                     <i class="fas fa-sync"></i> Update AI Analysis
                 </a>
+                {% if time_period and time_period.startswith('custom:') %}
+                    {% set dates = time_period.split(':') %}
+                    <a href="{{ url_for('export_complaints', search=search, time_period=time_period, has_notes=has_notes, start_date=dates[1], end_date=dates[2]) }}" class="btn btn-success ms-2">
+                        <i class="fas fa-file-csv"></i> Export to CSV
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('export_complaints', search=search, time_period=time_period, has_notes=has_notes) }}" class="btn btn-success ms-2">
+                        <i class="fas fa-file-csv"></i> Export to CSV
+                    </a>
+                {% endif %}
             </div>
         </div>
         <img src="{{ url_for('static', filename='images/bsh_logo.png') }}" alt="BSH Logo" style="height: 60px;">
