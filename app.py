@@ -1840,28 +1840,51 @@ def statistics():
 
 @app.route('/batch_process_complaints')
 def batch_process_complaints():
-    """Process all complaints with technical notes to generate OpenAI predictions."""
+    """Process filtered complaints with technical notes to generate OpenAI predictions."""
     logger.debug("Accessed batch_process_complaints route")
+    
+    # Get the same filter parameters as the list_complaints route
+    search = request.args.get('search', '')
+    time_period = request.args.get('time_period')
+    has_notes = request.args.get('has_notes') == 'true'
+    
+    # Handle custom date range
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    if not time_period and start_date and end_date:
+        time_period = f"custom:{start_date}:{end_date}"
+    elif time_period and time_period.startswith('custom:'):
+        # Extract start and end dates from time_period
+        parts = time_period.split(':')
+        if len(parts) == 3:
+            start_date = parts[1]
+            end_date = parts[2]
+    
     try:
         logger.debug("Connecting to database...")
         conn = connect_to_db()
         cursor = conn.cursor()
         
-        # Get all complaints that have technical notes
-        logger.debug("Fetching complaints with technical notes...")
-        cursor.execute("""
-            SELECT DISTINCT c.id, c.data 
-            FROM complaints c
-            INNER JOIN technical_notes tn ON c.id = tn.complaint_id
-            ORDER BY c.id
-        """)
-        complaints = cursor.fetchall()
-        logger.debug(f"Found {len(complaints)} complaints with technical notes")
+        # Get filtered complaints that have technical notes
+        # Use the same filtering logic as list_complaints, but only get complaints with technical notes
+        logger.debug("Fetching filtered complaints with technical notes...")
+        
+        # Get all complaints that match the filters without pagination
+        filtered_complaints, total_count = get_all_complaints(
+            page=1, 
+            items_per_page=10000,  # Set a high limit to get all complaints
+            search=search, 
+            time_period=time_period, 
+            has_notes=True  # Always filter for complaints with technical notes
+        )
+        
+        logger.debug(f"Found {len(filtered_complaints)} filtered complaints with technical notes")
         
         processed_count = 0
-        total_complaints = len(complaints)
+        skipped_count = 0
+        total_complaints = len(filtered_complaints)
         
-        for complaint_id, complaint_data in complaints:
+        for complaint_id, complaint_data, has_technical_notes in filtered_complaints:
             try:
                 # Get technical notes for this complaint
                 cursor.execute("""
@@ -1872,26 +1895,43 @@ def batch_process_complaints():
                 """, (complaint_id,))
                 technical_notes = cursor.fetchall()
                 
+                if not technical_notes:
+                    logger.debug(f"Skipping complaint {complaint_id} - no technical notes found")
+                    continue
+                
+                # Check if this complaint already has an AI analysis
+                latest_note_id = technical_notes[0][0]
+                latest_note_data = technical_notes[0][2]
+                
+                # Check if AI analysis already exists and is up-to-date
+                has_existing_analysis = ('ai_analysis' in latest_note_data and 
+                                         latest_note_data['ai_analysis'] is not None and
+                                         isinstance(latest_note_data['ai_analysis'], dict) and
+                                         'final_opinion' in latest_note_data['ai_analysis'] and
+                                         'rule_based_category' in latest_note_data['ai_analysis'])
+                
+                if has_existing_analysis:
+                    logger.debug(f"Complaint {complaint_id} already has AI analysis, skipping")
+                    skipped_count += 1
+                    continue
+                
                 # Generate AI analysis
+                logger.debug(f"Generating AI analysis for complaint {complaint_id}")
                 ai_analysis = generate_ai_analysis(complaint_data, technical_notes)
                 
                 # Update the most recent technical note with the new AI analysis
-                if technical_notes:
-                    latest_note_id = technical_notes[0][0]
-                    latest_note_data = technical_notes[0][2]
-                    
-                    # Update the AI analysis in the note data
-                    latest_note_data['ai_analysis'] = ai_analysis
-                    
-                    # Save the updated note data
-                    cursor.execute("""
-                        UPDATE technical_notes 
-                        SET data = %s 
-                        WHERE id = %s
-                    """, (json.dumps(latest_note_data), latest_note_id))
-                    
-                    processed_count += 1
-                    print(f"Processed complaint {complaint_id} ({processed_count}/{total_complaints})")
+                logger.debug(f"Updating technical note {latest_note_id} with AI analysis")
+                latest_note_data['ai_analysis'] = ai_analysis
+                
+                # Save the updated note data
+                cursor.execute("""
+                    UPDATE technical_notes 
+                    SET data = %s 
+                    WHERE id = %s
+                """, (json.dumps(latest_note_data), latest_note_id))
+                
+                processed_count += 1
+                print(f"Processed complaint {complaint_id} ({processed_count}/{total_complaints})")
                 
             except Exception as e:
                 print(f"Error processing complaint {complaint_id}: {str(e)}")
@@ -1901,13 +1941,22 @@ def batch_process_complaints():
         cursor.close()
         conn.close()
         
-        flash(f'Successfully processed {processed_count} complaints with technical notes.', 'success')
-        return redirect(url_for('list_complaints'))
+        # Create the return URL with all filters
+        return_url = url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes)
+        if start_date and end_date:
+            return_url = f"{return_url}&start_date={start_date}&end_date={end_date}"
+        
+        if skipped_count > 0:
+            flash(f'Successfully processed {processed_count} complaints. Skipped {skipped_count} complaints that already had AI analysis.', 'success')
+        else:
+            flash(f'Successfully processed {processed_count} complaints with technical notes.', 'success')
+        
+        return redirect(return_url)
         
     except Exception as e:
         print(f"Error in batch processing: {str(e)}")
         flash(f'Error processing complaints: {str(e)}', 'danger')
-        return redirect(url_for('list_complaints'))
+        return redirect(url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes))
 
 @app.route('/complaints/export')
 def export_complaints():
