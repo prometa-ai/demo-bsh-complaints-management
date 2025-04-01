@@ -361,7 +361,7 @@
                         <p>{{ ai_analysis.final_opinion }}</p>
 
                         <h6>Category:</h6>
-                        <p>{{ ai_analysis.category }}</p>
+                        <p><span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(ai_analysis.category, '#808080') }}; color: white; font-size: 1rem; padding: 0.5rem 1rem;">{{ ai_analysis.category }}</span></p>
 
                         <h6>Technical Diagnosis:</h6>
                         <p>{{ ai_analysis.technical_diagnosis|nl2br }}</p>

@@ -169,7 +169,6 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const pieLayout = {
-        ...commonLayout,
         showlegend: true,
         legend: {
             x: 1.1,
@@ -180,26 +179,43 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         width: 700,
         height: 500,
-        margin: { t: 50, b: 50, l: 50, r: 150 }
+        margin: { t: 50, b: 50, l: 50, r: 150 },
+        autosize: true
     };
 
     // Problem Distribution Plot
     const problemData = {{ problem_plot | safe }};
-    const problemLayout = Object.assign({}, problemData.layout, pieLayout, {
+    Plotly.newPlot('problem_distribution', problemData.data, {
+        showlegend: true,
+        legend: {
+            x: 1.1,
+            y: 0.5,
+            xanchor: 'left',
+            yanchor: 'middle',
+            orientation: 'v'
+        },
         width: 600,
         height: 400,
-        margin: { t: 50, b: 50, l: 50, r: 150 }
-    });
-    Plotly.newPlot('problem_distribution', problemData.data, problemLayout, plotConfig);
+        margin: { t: 50, b: 50, l: 50, r: 150 },
+        autosize: true
+    }, plotConfig);
 
     // Warranty Distribution Plot
     const warrantyData = {{ warranty_plot | safe }};
-    const warrantyLayout = Object.assign({}, warrantyData.layout, pieLayout, {
+    Plotly.newPlot('warranty_distribution', warrantyData.data, {
+        showlegend: true,
+        legend: {
+            x: 1,
+            y: 0.5,
+            xanchor: 'left',
+            yanchor: 'middle',
+            orientation: 'v'
+        },
         width: 500,
         height: 400,
-        margin: { t: 50, b: 50, l: 50, r: 50 }
-    });
-    Plotly.newPlot('warranty_distribution', warrantyData.data, warrantyLayout, plotConfig);
+        margin: { t: 50, b: 50, l: 50, r: 50 },
+        autosize: true
+    }, plotConfig);
 
     // Daily Trend Plot
     var dailyData = {{ daily_plot | safe }};

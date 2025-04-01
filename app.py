@@ -29,6 +29,27 @@ from dotenv import load_dotenv
 app = Flask(__name__)
 app.secret_key = 'bsh_complaint_management_key'
 
+# Define category colors globally
+category_colors = {
+    'NOISY GAS INJECTION': '#1f77b4',
+    'COMPRESSOR NOISE ISSUE': '#ff7f0e',
+    'COMPRESSOR NOT COOLING': '#2ca02c',
+    'DIGITAL PANEL MALFUNCTION': '#d62728',
+    'LIGHTING ISSUES': '#9467bd',
+    'DOOR SEAL FAILURE': '#8c564b',
+    'ICE MAKER FAILURE': '#e377c2',
+    'REFRIGERANT LEAK': '#7f7f7f',
+    'EVAPORATOR FAN MALFUNCTION': '#bcbd22',
+    'DEFROST SYSTEM FAILURE': '#17becf',
+    'WATER DISPENSER PROBLEM': '#aec7e8',
+    'DRAINAGE SYSTEM CLOG': '#ffbb78',
+    'OTHER ISSUES': '#98df8a',
+    'Pending Analysis': '#ff9896'
+}
+
+# Store category colors in app config for global access
+app.config['CATEGORY_COLORS'] = category_colors
+
 # Add nl2br filter for templates to display newlines properly
 @app.template_filter('nl2br')
 def nl2br(value):
@@ -270,23 +291,39 @@ def get_complaints_by_timeframe(start_date=None, end_date=None, timeframe='daily
     if start_date and end_date:
         if timeframe == 'monthly':
             cursor.execute("""
+            WITH RECURSIVE dates AS (
+                SELECT DATE_TRUNC('month', %s::timestamp) as date
+                UNION ALL
+                SELECT date + INTERVAL '1 month'
+                FROM dates
+                WHERE date < DATE_TRUNC('month', %s::timestamp)
+            )
             SELECT 
-                DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::timestamp) as complaint_date,
-                COUNT(*) as count
-            FROM complaints
-            WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
-            GROUP BY DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::timestamp)
-            ORDER BY complaint_date ASC
+                d.date,
+                COUNT(c.id)
+            FROM dates d
+            LEFT JOIN complaints c ON 
+                DATE_TRUNC('month', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = d.date
+            GROUP BY d.date
+            ORDER BY d.date ASC
             """, (start_date, end_date))
         else:  # daily
             cursor.execute("""
+            WITH RECURSIVE dates AS (
+                SELECT DATE_TRUNC('day', %s::timestamp) as date
+                UNION ALL
+                SELECT date + INTERVAL '1 day'
+                FROM dates
+                WHERE date < DATE_TRUNC('day', %s::timestamp)
+            )
             SELECT 
-                (data->'complaintDetails'->>'dateOfComplaint')::timestamp as complaint_date,
-                COUNT(*) as count
-            FROM complaints
-            WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
-            GROUP BY complaint_date
-            ORDER BY complaint_date ASC
+                d.date,
+                COUNT(c.id)
+            FROM dates d
+            LEFT JOIN complaints c ON 
+                DATE_TRUNC('day', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = d.date
+            GROUP BY d.date
+            ORDER BY d.date ASC
             """, (start_date, end_date))
     else:
         # Default to last 30 days
@@ -295,23 +332,39 @@ def get_complaints_by_timeframe(start_date=None, end_date=None, timeframe='daily
         
         if timeframe == 'monthly':
             cursor.execute("""
+            WITH RECURSIVE dates AS (
+                SELECT DATE_TRUNC('month', %s::timestamp) as date
+                UNION ALL
+                SELECT date + INTERVAL '1 month'
+                FROM dates
+                WHERE date < DATE_TRUNC('month', %s::timestamp)
+            )
             SELECT 
-                DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::timestamp) as complaint_date,
-                COUNT(*) as count
-            FROM complaints
-            WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
-            GROUP BY DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::timestamp)
-            ORDER BY complaint_date ASC
+                d.date,
+                COUNT(c.id)
+            FROM dates d
+            LEFT JOIN complaints c ON 
+                DATE_TRUNC('month', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = d.date
+            GROUP BY d.date
+            ORDER BY d.date ASC
             """, (thirty_days_ago, today))
         else:  # daily
             cursor.execute("""
+            WITH RECURSIVE dates AS (
+                SELECT DATE_TRUNC('day', %s::timestamp) as date
+                UNION ALL
+                SELECT date + INTERVAL '1 day'
+                FROM dates
+                WHERE date < DATE_TRUNC('day', %s::timestamp)
+            )
             SELECT 
-                (data->'complaintDetails'->>'dateOfComplaint')::timestamp as complaint_date,
-                COUNT(*) as count
-            FROM complaints
-            WHERE (data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s AND %s
-            GROUP BY complaint_date
-            ORDER BY complaint_date ASC
+                d.date,
+                COUNT(c.id)
+            FROM dates d
+            LEFT JOIN complaints c ON 
+                DATE_TRUNC('day', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = d.date
+            GROUP BY d.date
+            ORDER BY d.date ASC
             """, (thirty_days_ago, today))
     
     results = cursor.fetchall()
@@ -1583,11 +1636,16 @@ def statistics():
         # Create interactive plots using Plotly
         # Problem Distribution Plot
         if problem_distribution and len(problem_distribution) > 0:
+            # Get the colors in the same order as the data
+            colors = [category_colors.get(row[0], '#808080') for row in problem_distribution]
+            
             problem_fig = px.pie(
                 values=[row[1] for row in problem_distribution],
                 names=[row[0] for row in problem_distribution],
                 title='Analysis Result Categories',
                 hole=0.4,
+                color=[row[0] for row in problem_distribution],  # Use categories for color mapping
+                color_discrete_map=category_colors,  # Map categories to their exact colors
                 labels={'label': 'Category', 'value': 'Count'}
             )
             problem_fig.update_layout(
@@ -1612,9 +1670,13 @@ def statistics():
             )
             problem_fig.update_traces(
                 textposition='inside',
-                textinfo='percent+label',
-                insidetextorientation='radial'
+                textinfo='label+value',
+                insidetextorientation='radial',
+                hovertemplate='%{label}<br>Count: %{value}<extra></extra>'
             )
+            
+            # Store the category colors in the app config for use in templates
+            app.config['CATEGORY_COLORS'] = category_colors
         else:
             # Create an empty pie chart with a "No Data" message
             problem_fig = go.Figure(go.Pie(
@@ -1686,7 +1748,9 @@ def statistics():
                 x=daily_dates,
                 y=daily_counts,
                 mode='lines+markers',
-                name='Daily Complaints'
+                name='Daily Complaints',
+                line=dict(color='#007bff', width=2),
+                marker=dict(size=8, color='#007bff')
             ))
             daily_fig.update_layout(
                 title='Daily Complaint Trends',
@@ -1695,7 +1759,18 @@ def statistics():
                 showlegend=True,
                 height=500,
                 width=800,
-                margin=dict(t=50, b=50, l=50, r=50)
+                margin=dict(t=50, b=50, l=50, r=50),
+                yaxis=dict(
+                    tickmode='linear',
+                    tick0=0,
+                    dtick=1,
+                    rangemode='nonnegative'
+                ),
+                xaxis=dict(
+                    tickformat='%d %b %Y',
+                    tickangle=-45
+                ),
+                hovermode='x unified'
             )
         else:
             daily_fig = go.Figure()
