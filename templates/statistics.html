@@ -1,307 +1,156 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container">
-    <h1 class="mb-4">Complaint Analytics Dashboard</h1>
-
+<div class="container mt-4">
+    <h1 class="mb-4">Complaints Statistics</h1>
+    
     <!-- Time Period Filter -->
     <div class="card mb-4">
-        <div class="card-body">
-            <h5 class="card-title">Time Period</h5>
-            <div class="btn-group" role="group">
-                <a href="{{ url_for('statistics', period='all') }}" class="btn btn-outline-primary {% if period == 'all' %}active{% endif %}">All</a>
-                <a href="{{ url_for('statistics', period='24h') }}" class="btn btn-outline-primary {% if period == '24h' %}active{% endif %}">24h</a>
-                <a href="{{ url_for('statistics', period='1w') }}" class="btn btn-outline-primary {% if period == '1w' %}active{% endif %}">1w</a>
-                <a href="{{ url_for('statistics', period='30d') }}" class="btn btn-outline-primary {% if period == '30d' %}active{% endif %}">30d</a>
-                <a href="{{ url_for('statistics', period='3m') }}" class="btn btn-outline-primary {% if period == '3m' %}active{% endif %}">3m</a>
-                <a href="{{ url_for('statistics', period='6m') }}" class="btn btn-outline-primary {% if period == '6m' %}active{% endif %}">6m</a>
-                <a href="{{ url_for('statistics', period='1y') }}" class="btn btn-outline-primary {% if period == '1y' %}active{% endif %}">1y</a>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#customDateModal">
-                    Custom
+        <div class="card-header">
+            <div class="d-flex flex-wrap align-items-center">
+                <span class="me-2">Time period:</span>
+                <div class="btn-group me-3">
+                    <a href="{{ url_for('statistics') }}" class="btn btn-sm btn-outline-secondary {% if not time_period %}active{% endif %}">All</a>
+                    <a href="{{ url_for('statistics', time_period='24h') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '24h' %}active{% endif %}">24h</a>
+                    <a href="{{ url_for('statistics', time_period='1w') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1w' %}active{% endif %}">1w</a>
+                    <a href="{{ url_for('statistics', time_period='30d') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '30d' %}active{% endif %}">30d</a>
+                    <a href="{{ url_for('statistics', time_period='3m') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '3m' %}active{% endif %}">3m</a>
+                    <a href="{{ url_for('statistics', time_period='6m') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '6m' %}active{% endif %}">6m</a>
+                    <a href="{{ url_for('statistics', time_period='1y') }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1y' %}active{% endif %}">1y</a>
+                </div>
+                
+                <button class="btn btn-sm btn-outline-primary me-3" type="button" data-bs-toggle="collapse" data-bs-target="#customDateCollapse" aria-expanded="false">
+                    Custom Range
                 </button>
             </div>
-        </div>
-    </div>
+            
+            <div class="collapse mt-2 {% if time_period and time_period.startswith('custom:') %}show{% endif %}" id="customDateCollapse">
+                <form action="{{ url_for('statistics') }}" method="GET" class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <label for="startDate" class="form-label small">Start Date</label>
+                        <input type="date" id="startDate" name="start_date" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="endDate" class="form-label small">End Date</label>
+                        <input type="date" id="endDate" name="end_date" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-sm btn-primary mt-2">Apply Custom Range</button>
+                    </div>
+                </form>
+            </div>
 
-    <!-- Custom Date Range Modal -->
-    <div class="modal fade" id="customDateModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Select Custom Date Range</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form action="{{ url_for('statistics') }}" method="get" id="customDateForm">
-                        <div class="mb-3">
-                            <label for="start_date" class="form-label">Start Date</label>
-                            <input type="date" class="form-control" id="start_date" name="start_date" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="end_date" class="form-label">End Date</label>
-                            <input type="date" class="form-control" id="end_date" name="end_date" required>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" form="customDateForm" class="btn btn-primary">Apply</button>
+            <div class="mt-3">
+                <div class="alert alert-info mb-0">
+                    <i class="fas fa-filter me-2"></i>
+                    {% if time_period %}
+                        {% if time_period == '24h' %}
+                            Showing statistics from the last 24 hours
+                        {% elif time_period == '1w' %}
+                            Showing statistics from the last week
+                        {% elif time_period == '30d' %}
+                            Showing statistics from the last 30 days
+                        {% elif time_period == '3m' %}
+                            Showing statistics from the last 3 months
+                        {% elif time_period == '6m' %}
+                            Showing statistics from the last 6 months
+                        {% elif time_period == '1y' %}
+                            Showing statistics from the last year
+                        {% elif time_period.startswith('custom:') %}
+                            Showing statistics for the selected date range
+                        {% endif %}
+                    {% else %}
+                        Showing all statistics
+                    {% endif %}
+                    <span class="badge bg-primary ms-2">{{ total_complaints }} complaints</span>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Summary Cards -->
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card bg-primary text-white">
-                <div class="card-body text-center">
-                    <h2 class="display-4">{{ total_complaints }}</h2>
-                    <p class="lead">Total Complaints</p>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Complaints</h5>
+                    <h2 class="card-text">{{ total_complaints }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-success text-white">
-                <div class="card-body text-center">
-                    <h2 class="display-4">{{ active_warranty }}</h2>
-                    <p class="lead">Active Warranty</p>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Active Warranty</h5>
+                    <h2 class="card-text">{{ active_warranty }}</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-warning">
-                <div class="card-body text-center">
-                    <h2 class="display-4">{{ recent_complaints_count }}</h2>
-                    <p class="lead">Active Complaints</p>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Resolution Rate</h5>
+                    <h2 class="card-text">{{ "%.1f"|format(resolution_rate|default(0)) }}%</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div id="problemDistribution"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-body">
+                    <div id="warrantyDistribution"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="row">
-        <div class="col-md-6">
+        <div class="col-md-6 mb-4">
             <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Problem Distribution</h5>
-                </div>
                 <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Problem Type</th>
-                                    <th>Count</th>
-                                    <th>Percentage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for problem, count in problem_distribution %}
-                                <tr>
-                                    <td>{{ problem }}</td>
-                                    <td>{{ count }}</td>
-                                    <td>{{ "%.1f"|format(count / total_complaints * 100) }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <div id="dailyTrend"></div>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-6 mb-4">
             <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Warranty Status Distribution</h5>
-                </div>
                 <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Count</th>
-                                    <th>Percentage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for status, count in warranty_distribution %}
-                                <tr>
-                                    <td>
-                                        <span class="badge {% if status == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                                            {{ status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ count }}</td>
-                                    <td>{{ "%.1f"|format(count / total_complaints * 100) }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <div id="monthlyTrend"></div>
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Complaint Trends (Last 30 Days)</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <img src="data:image/png;base64,{{ trend_chart }}" class="img-fluid" alt="Complaint Trends Chart">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Top 10 Most Common Issues</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <img src="data:image/png;base64,{{ problem_chart }}" class="img-fluid" alt="Problem Distribution Chart">
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Warranty Status Distribution</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <img src="data:image/png;base64,{{ warranty_chart }}" class="img-fluid" alt="Warranty Distribution Chart">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Monthly Complaint Trends</h5>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <img src="data:image/png;base64,{{ time_chart }}" class="img-fluid" alt="Monthly Trends Chart">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Complaint Status Distribution</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Count</th>
-                                    <th>Percentage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% set total = status_distribution | sum(attribute='1') %}
-                                {% for status, count in status_distribution %}
-                                <tr>
-                                    <td>
-                                        <span class="badge {% if status == 'Not Resolved' %}bg-warning
-                                                         {% elif status == 'Resolved' %}bg-success
-                                                         {% elif status == 'Canceled' %}bg-danger
-                                                         {% endif %}">
-                                            {{ status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ count }}</td>
-                                    <td>{{ "%.1f"|format(count/total*100) }}%</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Complaint Status Trends</h5>
-                </div>
-                <div class="card-body">
-                    <img src="data:image/png;base64,{{ status_trend_chart }}" class="img-fluid" alt="Status Trends">
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Active Complaints</h5>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Customer</th>
-                                    <th>Model</th>
-                                    <th>Date</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for complaint in recent_complaints %}
-                                <tr>
-                                    <td>{{ complaint[0] }}</td>
-                                    <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
-                                    <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
-                                    <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'] }}</td>
-                                    <td>
-                                        <span class="badge {% if complaint[1]['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                                            {{ complaint[1]['warrantyInformation']['warrantyStatus'] }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-eye"></i> View
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="text-center mt-4">
-        <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">
-            <i class="fas fa-list me-1"></i>View All Complaints
-        </a>
     </div>
 </div>
+
+<!-- Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    // Problem Distribution Chart
+    var problemData = JSON.parse('{{ problem_plot | safe }}');
+    Plotly.newPlot('problemDistribution', problemData.data, problemData.layout);
+
+    // Warranty Distribution Chart
+    var warrantyData = JSON.parse('{{ warranty_plot | safe }}');
+    Plotly.newPlot('warrantyDistribution', warrantyData.data, warrantyData.layout);
+
+    // Daily Trend Chart
+    var dailyData = JSON.parse('{{ daily_plot | safe }}');
+    Plotly.newPlot('dailyTrend', dailyData.data, dailyData.layout);
+
+    // Monthly Trend Chart
+    var monthlyData = JSON.parse('{{ monthly_plot | safe }}');
+    Plotly.newPlot('monthlyTrend', monthlyData.data, monthlyData.layout);
+</script>
 {% endblock %}
 
 {% block styles %}

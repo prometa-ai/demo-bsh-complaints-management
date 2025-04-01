@@ -1,477 +1,413 @@
 {% extends 'base.html' %}
 
 {% block content %}
-{% set id, data = complaint %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('list_complaints') }}">Complaints</a></li>
+                    <li class="breadcrumb-item active">Complaint Details</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="text-primary">
-        <i class="fas fa-ticket-alt me-2"></i>Unified Complaint Ticket #{{ id }}
-    </h1>
-    <div>
-        <a href="{{ url_for('list_complaints') }}" class="btn btn-outline-primary">
-            <i class="fas fa-arrow-left me-1"></i>Back to List
-        </a>
-    </div>
-</div>
-
-<!-- Main Ticket Information -->
-<div class="card mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">Customer: {{ data['customerInformation']['fullName'] }} - Model: {{ data['productInformation']['modelNumber'] }}</h5>
-    </div>
-    <div class="card-body">
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <p><strong>Customer Name:</strong> {{ data['customerInformation']['fullName'] }}</p>
-                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
-                <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
-                <p><strong>Address:</strong> {{ data['customerInformation']['address'] }}, {{ data['customerInformation']['city'] }}, {{ data['customerInformation']['stateProvince'] }} {{ data['customerInformation']['postalCode'] }}</p>
-            </div>
-            <div class="col-md-6">
-                <p><strong>Product Model:</strong> {{ data['productInformation']['modelNumber'] }}</p>
-                <p><strong>Serial Number:</strong> {{ data['productInformation']['serialNumber'] }}</p>
-                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
-                <p><strong>Warranty Status:</strong> 
-                    <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ data['warrantyInformation']['warrantyStatus'] }}
-                    </span>
-                    <span class="text-muted ms-2">Expires: {{ data['warrantyInformation']['warrantyExpirationDate'] }}</span>
-                </p>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Complaint Information -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0">Complaint Details</h5>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <h6>Customer Information</h6>
-                <p><strong>Name:</strong> {{ data['customerInformation']['fullName'] }}</p>
-                <p><strong>Contact:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
-                <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
-                <p><strong>Address:</strong> {{ data['customerInformation']['address'] }}</p>
-            </div>
-            <div class="col-md-6">
-                <h6>Resolution Status</h6>
-                <form action="{{ url_for('update_complaint_status', complaint_id=id) }}" method="POST" class="mb-3">
-                    <div class="input-group">
-                        <select name="status" class="form-select">
-                            <option value="Not Resolved" {% if data['complaintDetails'].get('resolutionStatus') == 'Not Resolved' %}selected{% endif %}>Not Resolved</option>
-                            <option value="Resolved" {% if data['complaintDetails'].get('resolutionStatus') == 'Resolved' %}selected{% endif %}>Resolved</option>
-                            <option value="Canceled" {% if data['complaintDetails'].get('resolutionStatus') == 'Canceled' %}selected{% endif %}>Canceled</option>
-                        </select>
-                        <button type="submit" class="btn btn-primary">Update Status</button>
-                    </div>
-                </form>
-                
-                <h6>Product Information</h6>
-                <p><strong>Model Number:</strong> {{ data['productInformation']['modelNumber'] }}</p>
-                <p><strong>Serial Number:</strong> {{ data['productInformation']['serialNumber'] }}</p>
-                <p><strong>Purchase Date:</strong> {{ data['productInformation']['dateOfPurchase'] }}</p>
-            </div>
-        </div>
-        <div class="row mb-3">
-            <div class="col-md-6">
-                <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
-                <p><strong>Problem Types:</strong> 
-                    {% for problem in data['complaintDetails']['natureOfProblem'] %}
-                        <span class="badge bg-primary me-1">{{ problem }}</span>
-                    {% endfor %}
-                </p>
-                <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
-                <p><strong>Date First Occurred:</strong> {{ data['complaintDetails']['problemFirstOccurrence'] }}</p>
-            </div>
-            <div class="col-md-6">
-                <p><strong>Environmental Conditions:</strong></p>
-                <ul>
-                    <li>Room Temperature: {{ data['environmentalConditions']['roomTemperature'] }}</li>
-                    <li>Ventilation: {{ data['environmentalConditions']['ventilation'] }}</li>
-                    <li>Recent Changes: {{ data['environmentalConditions']['recentEnvironmentalChanges'] }}</li>
-                </ul>
-            </div>
-        </div>
-        <div class="mb-3">
-            <p><strong>Detailed Description:</strong></p>
-            <div class="p-3 bg-light rounded">{{ data['complaintDetails']['detailedDescription'] }}</div>
-        </div>
-        {% if data['complaintDetails']['repairAttempted'] %}
-        <div class="mb-3">
-            <p><strong>Previous Repair Attempt:</strong> Yes</p>
-            <div class="p-3 bg-light rounded">{{ data['complaintDetails']['repairDetails'] }}</div>
-        </div>
+    <!-- Display any flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
         {% endif %}
-    </div>
-</div>
+    {% endwith %}
 
-<!-- Customer Service Notes -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0">Customer Service Notes</h5>
-    </div>
-    <div class="card-body">
-        <div class="mb-3">
-            <p><strong>Initial Assessment:</strong></p>
-            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['initialAssessment'] }}</div>
-        </div>
-        <div class="mb-3">
-            <p><strong>Immediate Actions Taken:</strong></p>
-            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['immediateActionsTaken'] }}</div>
-        </div>
-        <div class="mb-3">
-            <p><strong>Recommendations:</strong></p>
-            <div class="p-3 bg-light rounded">{{ data['serviceRepresentativeNotes']['recommendations'] }}</div>
-        </div>
-    </div>
-</div>
-
-<!-- Technical Assessment -->
-{% if technical_notes %}
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Technical Assessment & Field Service</h5>
-        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTechnicalNoteModal">
-            <i class="fas fa-plus me-1"></i>Add Technical Note
-        </button>
-    </div>
-    <div class="card-body">
-        {% for note_id, complaint_id, note_data in technical_notes %}
-        <div class="card mb-4">
-            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">Technician: {{ note_data.technicianName }}</h6>
-                <span>Visit Date: {{ note_data.visitDate }}</span>
-            </div>
-            <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <p><strong>Error Code/Symptom Code:</strong></p>
-                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.faultDiagnosis }}</div>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Faulty Parts Identified:</strong></p>
-                        <p>
-                            {% for component in note_data.technicalAssessment.componentInspected %}
-                                <span class="badge bg-info me-1">{{ component }}</span>
-                            {% endfor %}
-                        </p>
-                    </div>
-                </div>
-                
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <p><strong>Root Cause:</strong></p>
-                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.rootCause }}</div>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Proposed Solution:</strong></p>
-                        <div class="p-3 bg-light rounded">{{ note_data.technicalAssessment.solutionProposed }}</div>
-                    </div>
-                </div>
-                
-                <div class="mb-3">
-                    <p><strong>Work Executed:</strong></p>
-                    <div class="p-3 bg-light rounded mb-2">{{ note_data.repairDetails or "No repair details provided" }}</div>
-                    
-                    {% if note_data.partsReplaced %}
-                    <p><strong>Parts Replaced:</strong></p>
-                    <p>
-                        {% for part in note_data.partsReplaced %}
-                            <span class="badge bg-warning text-dark me-1">{{ part }}</span>
-                        {% endfor %}
-                    </p>
-                    {% endif %}
-                </div>
-                
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Follow-up Required:</strong> 
-                            <span class="badge {% if note_data.followUpRequired %}bg-danger{% else %}bg-success{% endif %}">
-                                {{ "Yes" if note_data.followUpRequired else "No" }}
-                            </span>
-                        </p>
-                        {% if note_data.followUpRequired and note_data.followUpNotes %}
-                        <div class="p-3 bg-light rounded">{{ note_data.followUpNotes }}</div>
-                        {% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Customer Satisfaction:</strong></p>
-                        <div class="p-2 bg-light rounded text-center">
-                            <h5>
-                                {% if note_data.customerSatisfaction == '5' %}
-                                    <span class="text-success">★★★★★</span>
-                                {% elif note_data.customerSatisfaction == '4' %}
-                                    <span class="text-success">★★★★</span><span class="text-muted">★</span>
-                                {% elif note_data.customerSatisfaction == '3' %}
-                                    <span class="text-warning">★★★</span><span class="text-muted">★★</span>
-                                {% elif note_data.customerSatisfaction == '2' %}
-                                    <span class="text-warning">★★</span><span class="text-muted">★★★</span>
-                                {% elif note_data.customerSatisfaction == '1' %}
-                                    <span class="text-danger">★</span><span class="text-muted">★★★★</span>
-                                {% else %}
-                                    <span class="text-muted">Not specified</span>
-                                {% endif %}
-                            </h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0">Technical Assessment</h5>
-    </div>
-    <div class="card-body">
-        <div class="alert alert-info">
-            No technical assessment has been performed yet.
-            <button type="button" class="btn btn-sm btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#addTechnicalNoteModal">
-                <i class="fas fa-plus me-1"></i>Add Technical Note
-            </button>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Quality Analysis Results -->
-<div class="card mb-4">
-    <div class="card-header bg-dark text-white">
-        <h5 class="mb-0">BSH Quality Analysis Result</h5>
-    </div>
-    <div class="card-body">
-        {% if ai_analysis %}
-        
-        {% if "INCONSISTENT" in ai_analysis.category %}
-        <div class="alert alert-warning mb-4">
-            <h5><i class="fas fa-exclamation-triangle me-2"></i>Inconsistency Detected</h5>
-            <p>The technical assessment findings differ from the customer's reported issue. This analysis addresses both concerns.</p>
-        </div>
-        {% endif %}
-        
-        <div class="p-4 bg-light rounded mb-3">
-            <div class="mb-4">
-                <h5 class="text-primary">Final Opinion:</h5>
-                <div class="p-3 bg-white rounded border">{{ ai_analysis.final_opinion }}</div>
-            </div>
-            
-            <div class="mb-4">
-                <h5 class="text-primary">Issue Category:</h5>
-                <div class="p-3 bg-white rounded border">
-                    <span class="badge {% if 'INCONSISTENT' in ai_analysis.category %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-5 p-2">{{ ai_analysis.category }}</span>
-                </div>
-            </div>
-            
-            <div class="mb-4">
-                <h5 class="text-primary">Technical Diagnosis:</h5>
-                <div class="p-3 bg-white rounded border">{{ ai_analysis.technical_diagnosis | nl2br }}</div>
-            </div>
-            
-            {% if ai_analysis.root_cause %}
-            <div class="mb-4">
-                <h5 class="text-primary">Root Cause:</h5>
-                <div class="p-3 bg-white rounded border">{{ ai_analysis.root_cause }}</div>
-            </div>
-            {% endif %}
-            
-            {% if ai_analysis.solution_implemented %}
-            <div class="mb-4">
-                <h5 class="text-primary">Solution Implemented:</h5>
-                <div class="p-3 bg-white rounded border">{{ ai_analysis.solution_implemented }}</div>
-            </div>
-            {% endif %}
-            
-            {% if ai_analysis.systemic_assessment %}
-            <div class="mb-4">
-                <h5 class="text-primary">Systemic Assessment:</h5>
-                <div class="p-3 bg-white rounded border">{{ ai_analysis.systemic_assessment }}</div>
-            </div>
-            {% endif %}
-            
-            {% if ai_analysis.recommendations %}
-            <div class="mb-4">
-                <h5 class="text-primary">Recommendations:</h5>
-                <div class="p-3 bg-white rounded border">
-                    <ul class="mb-0">
-                        {% for rec in ai_analysis.recommendations %}
-                        <li>{{ rec }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% else %}
+    <!-- Display warning if assessment is inconsistent -->
+    {% if warning %}
         <div class="alert alert-warning">
-            No quality analysis is available yet. Please add technical notes first.
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<!-- Add Technical Note Modal -->
-<div class="modal fade" id="addTechnicalNoteModal" tabindex="-1" aria-labelledby="addTechnicalNoteModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addTechnicalNoteModalLabel">Add Technical Assessment Note</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form method="POST" action="{{ url_for('unified_complaint', complaint_id=id) }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="technicianName" class="form-label">Technician Name</label>
-                        <input type="text" class="form-control" id="technicianName" name="technicianName" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="visitDate" class="form-label">Visit Date</label>
-                        <input type="date" class="form-control" id="visitDate" name="visitDate" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Components Inspected</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Compressor" id="compressor">
-                            <label class="form-check-label" for="compressor">Compressor</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Evaporator Fan" id="evaporatorFan">
-                            <label class="form-check-label" for="evaporatorFan">Evaporator Fan</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Condenser Fan" id="condenserFan">
-                            <label class="form-check-label" for="condenserFan">Condenser Fan</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Thermostat" id="thermostat">
-                            <label class="form-check-label" for="thermostat">Thermostat</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Control Board" id="controlBoard">
-                            <label class="form-check-label" for="controlBoard">Control Board</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Door Seal" id="doorSeal">
-                            <label class="form-check-label" for="doorSeal">Door Seal</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Lighting System" id="lightingSystem">
-                            <label class="form-check-label" for="lightingSystem">Lighting System</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Ice Maker" id="iceMaker">
-                            <label class="form-check-label" for="iceMaker">Ice Maker</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Water Dispenser" id="waterDispenser">
-                            <label class="form-check-label" for="waterDispenser">Water Dispenser</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="componentInspected" value="Defrost System" id="defrostSystem">
-                            <label class="form-check-label" for="defrostSystem">Defrost System</label>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="faultDiagnosis" class="form-label">Fault Diagnosis</label>
-                        <textarea class="form-control" id="faultDiagnosis" name="faultDiagnosis" rows="3" required></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="rootCause" class="form-label">Root Cause</label>
-                        <textarea class="form-control" id="rootCause" name="rootCause" rows="3" required></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="solutionProposed" class="form-label">Proposed Solution</label>
-                        <textarea class="form-control" id="solutionProposed" name="solutionProposed" rows="3" required></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label">Parts Replaced</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Compressor" id="replacedCompressor">
-                            <label class="form-check-label" for="replacedCompressor">Compressor</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Evaporator Fan" id="replacedEvaporatorFan">
-                            <label class="form-check-label" for="replacedEvaporatorFan">Evaporator Fan</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Condenser Fan" id="replacedCondenserFan">
-                            <label class="form-check-label" for="replacedCondenserFan">Condenser Fan</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Thermostat" id="replacedThermostat">
-                            <label class="form-check-label" for="replacedThermostat">Thermostat</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Control Board" id="replacedControlBoard">
-                            <label class="form-check-label" for="replacedControlBoard">Control Board</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Door Seal" id="replacedDoorSeal">
-                            <label class="form-check-label" for="replacedDoorSeal">Door Seal</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Lighting System" id="replacedLightingSystem">
-                            <label class="form-check-label" for="replacedLightingSystem">Lighting System</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Ice Maker" id="replacedIceMaker">
-                            <label class="form-check-label" for="replacedIceMaker">Ice Maker</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Water Dispenser" id="replacedWaterDispenser">
-                            <label class="form-check-label" for="replacedWaterDispenser">Water Dispenser</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="partsReplaced" value="Defrost System" id="replacedDefrostSystem">
-                            <label class="form-check-label" for="replacedDefrostSystem">Defrost System</label>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="repairDetails" class="form-label">Repair Details</label>
-                        <textarea class="form-control" id="repairDetails" name="repairDetails" rows="3" required></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="followUpRequired" name="followUpRequired">
-                            <label class="form-check-label" for="followUpRequired">Follow-up Required</label>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="followUpNotes" class="form-label">Follow-up Notes</label>
-                        <textarea class="form-control" id="followUpNotes" name="followUpNotes" rows="2"></textarea>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="customerSatisfaction" class="form-label">Customer Satisfaction Rating</label>
-                        <select class="form-select" id="customerSatisfaction" name="customerSatisfaction" required>
-                            <option value="">Select rating...</option>
-                            <option value="5">5 - Excellent</option>
-                            <option value="4">4 - Good</option>
-                            <option value="3">3 - Satisfactory</option>
-                            <option value="2">2 - Poor</option>
-                            <option value="1">1 - Very Poor</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Technical Note</button>
-                </div>
+            {{ warning }}
+            <form method="POST" class="mt-2">
+                {% for key, value in form_data.items() %}
+                    {% if key != 'csrf_token' and key != 'confirmed_inconsistent' %}
+                        <input type="hidden" name="{{ key }}" value="{{ value }}">
+                    {% endif %}
+                {% endfor %}
+                <input type="hidden" name="confirmed_inconsistent" value="true">
+                <button type="submit" class="btn btn-warning">Confirm and Submit Anyway</button>
+                <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-secondary">Cancel</a>
             </form>
         </div>
+    {% endif %}
+
+    <!-- Main content -->
+    <div class="row">
+        <!-- Customer and Product Information -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Customer Information</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Name:</strong> {{ complaint[1].customerInformation.fullName }}</p>
+                    <p><strong>Email:</strong> {{ complaint[1].customerInformation.emailAddress }}</p>
+                    <p><strong>Phone:</strong> {{ complaint[1].customerInformation.phoneNumber }}</p>
+                    <p><strong>Address:</strong><br>
+                        {{ complaint[1].customerInformation.address }}<br>
+                        {{ complaint[1].customerInformation.city }}, {{ complaint[1].customerInformation.stateProvince }}<br>
+                        {{ complaint[1].customerInformation.postalCode }}<br>
+                        {{ complaint[1].customerInformation.country }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Product Information</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Model Number:</strong> {{ complaint[1].productInformation.modelNumber }}</p>
+                    <p><strong>Serial Number:</strong> {{ complaint[1].productInformation.serialNumber }}</p>
+                    <p><strong>Purchase Date:</strong> {{ complaint[1].productInformation.dateOfPurchase[:10] }}</p>
+                    <p><strong>Place of Purchase:</strong> {{ complaint[1].productInformation.placeOfPurchase }}</p>
+                    <p><strong>Warranty Status:</strong> 
+                        {% if complaint[1].customerInformation.warrantyStatus == 'true' %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Expired</span>
+                        {% endif %}
+                    </p>
+                    {% if complaint[1].warrantyInformation %}
+                        <p><strong>Warranty Expiration:</strong> {{ complaint[1].warrantyInformation.warrantyExpirationDate[:10] }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Complaint Details -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Complaint Details</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Date of Complaint:</strong> {{ complaint[1].complaintDetails.dateOfComplaint[:10] }}</p>
+                    <p><strong>Problem First Occurred:</strong> {{ complaint[1].complaintDetails.problemFirstOccurrence[:10] }}</p>
+                    <p><strong>Nature of Problem:</strong></p>
+                    <ul>
+                        {% for problem in complaint[1].complaintDetails.natureOfProblem %}
+                            <li>{{ problem }}</li>
+                        {% endfor %}
+                    </ul>
+                    <p><strong>Detailed Description:</strong><br>
+                        {{ complaint[1].complaintDetails.detailedDescription|nl2br }}</p>
+                    <p><strong>Frequency:</strong> {{ complaint[1].complaintDetails.frequency }}</p>
+                    <p><strong>Resolution Status:</strong> 
+                        {% if complaint[1].complaintDetails.resolutionStatus == 'Resolved' %}
+                            <span class="badge bg-success">Resolved</span>
+                        {% elif complaint[1].complaintDetails.resolutionStatus == 'Canceled' %}
+                            <span class="badge bg-warning">Canceled</span>
+                        {% else %}
+                            <span class="badge bg-danger">Not Resolved</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Environmental Conditions</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Room Temperature:</strong> {{ complaint[1].environmentalConditions.roomTemperature }}</p>
+                    <p><strong>Ventilation:</strong> {{ complaint[1].environmentalConditions.ventilation }}</p>
+                    <p><strong>Recent Changes:</strong> {{ complaint[1].environmentalConditions.recentEnvironmentalChanges }}</p>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Service Representative Notes</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Initial Assessment:</strong><br>
+                        {{ complaint[1].serviceRepresentativeNotes.initialAssessment|nl2br }}</p>
+                    <p><strong>Immediate Actions Taken:</strong><br>
+                        {{ complaint[1].serviceRepresentativeNotes.immediateActionsTaken|nl2br }}</p>
+                    <p><strong>Recommendations:</strong><br>
+                        {{ complaint[1].serviceRepresentativeNotes.recommendations|nl2br }}</p>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Technical Notes Section -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Technical Assessment</h5>
+                </div>
+                <div class="card-body">
+                    {% if technical_notes %}
+                        <div class="accordion" id="technicalNotesAccordion">
+                            {% for note_id, complaint_id, note_data in technical_notes %}
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header" id="heading{{ note_id }}">
+                                        <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ note_id }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="collapse{{ note_id }}">
+                                            Technical Note - {{ note_data.visitDate }} by {{ note_data.technicianName }}
+                                        </button>
+                                    </h2>
+                                    <div id="collapse{{ note_id }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" aria-labelledby="heading{{ note_id }}" data-bs-parent="#technicalNotesAccordion">
+                                        <div class="accordion-body">
+                                            <h6>Components Inspected:</h6>
+                                            <ul>
+                                                {% for component in note_data.technicalAssessment.componentInspected %}
+                                                    <li>{{ component }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                            
+                                            <h6>Fault Diagnosis:</h6>
+                                            <p>{{ note_data.technicalAssessment.faultDiagnosis }}</p>
+                                            
+                                            <h6>Root Cause:</h6>
+                                            <p>{{ note_data.technicalAssessment.rootCause }}</p>
+                                            
+                                            <h6>Solution Proposed:</h6>
+                                            <p>{{ note_data.technicalAssessment.solutionProposed }}</p>
+                                            
+                                            {% if note_data.partsReplaced %}
+                                                <h6>Parts Replaced:</h6>
+                                                <ul>
+                                                    {% for part in note_data.partsReplaced %}
+                                                        <li>{{ part }}</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% endif %}
+                                            
+                                            <h6>Repair Details:</h6>
+                                            <p>{{ note_data.repairDetails }}</p>
+                                            
+                                            <div class="mt-3">
+                                                <p><strong>Follow-up Required:</strong> {{ 'Yes' if note_data.followUpRequired else 'No' }}</p>
+                                                {% if note_data.followUpRequired %}
+                                                    <p><strong>Follow-up Notes:</strong> {{ note_data.followUpNotes }}</p>
+                                                {% endif %}
+                                            </div>
+                                            
+                                            <div class="mt-3">
+                                                <p><strong>Customer Satisfaction:</strong> {{ note_data.customerSatisfaction }} / 5</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <!-- Add Technical Note Form -->
+                    <div class="mt-4">
+                        <h5>Add Technical Note</h5>
+                        <form method="POST" class="needs-validation" novalidate>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="technicianName" class="form-label">Technician Name</label>
+                                    <input type="text" class="form-control" id="technicianName" name="technicianName" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="visitDate" class="form-label">Visit Date</label>
+                                    <input type="date" class="form-control" id="visitDate" name="visitDate" required>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Components Inspected</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Compressor">
+                                        <label class="form-check-label">Compressor</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Evaporator">
+                                        <label class="form-check-label">Evaporator</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Condenser">
+                                        <label class="form-check-label">Condenser</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Fan Motor">
+                                        <label class="form-check-label">Fan Motor</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Thermostat">
+                                        <label class="form-check-label">Thermostat</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Control Board">
+                                        <label class="form-check-label">Control Board</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="componentInspected" value="Door Seal">
+                                        <label class="form-check-label">Door Seal</label>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Parts Replaced</label>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Compressor">
+                                        <label class="form-check-label">Compressor</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Evaporator">
+                                        <label class="form-check-label">Evaporator</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Condenser">
+                                        <label class="form-check-label">Condenser</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Fan Motor">
+                                        <label class="form-check-label">Fan Motor</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Thermostat">
+                                        <label class="form-check-label">Thermostat</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Control Board">
+                                        <label class="form-check-label">Control Board</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" name="partsReplaced" value="Door Seal">
+                                        <label class="form-check-label">Door Seal</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label for="faultDiagnosis" class="form-label">Fault Diagnosis</label>
+                                    <textarea class="form-control" id="faultDiagnosis" name="faultDiagnosis" rows="3" required></textarea>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label for="rootCause" class="form-label">Root Cause</label>
+                                    <textarea class="form-control" id="rootCause" name="rootCause" rows="3" required></textarea>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label for="solutionProposed" class="form-label">Solution Proposed</label>
+                                    <textarea class="form-control" id="solutionProposed" name="solutionProposed" rows="3" required></textarea>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label for="repairDetails" class="form-label">Repair Details</label>
+                                    <textarea class="form-control" id="repairDetails" name="repairDetails" rows="3" required></textarea>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="followUpRequired" name="followUpRequired">
+                                        <label class="form-check-label" for="followUpRequired">Follow-up Required</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2" id="followUpNotesSection" style="display: none;">
+                                <div class="col-12">
+                                    <label for="followUpNotes" class="form-label">Follow-up Notes</label>
+                                    <textarea class="form-control" id="followUpNotes" name="followUpNotes" rows="3"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-6">
+                                    <label for="customerSatisfaction" class="form-label">Customer Satisfaction (1-5)</label>
+                                    <input type="number" class="form-control" id="customerSatisfaction" name="customerSatisfaction" min="1" max="5" required>
+                                </div>
+                            </div>
+
+                            <div class="row mt-4">
+                                <div class="col">
+                                    <button type="submit" class="btn btn-primary">Submit Technical Assessment</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Analysis Section -->
+    {% if ai_analysis %}
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">AI Analysis</h5>
+                    </div>
+                    <div class="card-body">
+                        <h6>Final Opinion:</h6>
+                        <p>{{ ai_analysis.final_opinion }}</p>
+
+                        <h6>Category:</h6>
+                        <p>{{ ai_analysis.category }}</p>
+
+                        <h6>Technical Diagnosis:</h6>
+                        <p>{{ ai_analysis.technical_diagnosis|nl2br }}</p>
+
+                        <h6>Root Cause:</h6>
+                        <p>{{ ai_analysis.root_cause }}</p>
+
+                        <h6>Solution Implemented:</h6>
+                        <p>{{ ai_analysis.solution_implemented }}</p>
+
+                        <h6>Systemic Assessment:</h6>
+                        <p>{{ ai_analysis.systemic_assessment }}</p>
+
+                        <h6>Recommendations:</h6>
+                        <ul>
+                            {% for recommendation in ai_analysis.recommendations %}
+                                <li>{{ recommendation }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 </div>
+
+<script>
+    // Show/hide follow-up notes section based on checkbox
+    document.getElementById('followUpRequired').addEventListener('change', function() {
+        document.getElementById('followUpNotesSection').style.display = this.checked ? 'block' : 'none';
+    });
+
+    // Form validation
+    (function () {
+        'use strict'
+        var forms = document.querySelectorAll('.needs-validation')
+        Array.prototype.slice.call(forms)
+            .forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                    }
+                    form.classList.add('was-validated')
+                }, false)
+            })
+    })()
+</script>
 {% endblock %} 

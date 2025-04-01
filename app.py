@@ -12,6 +12,11 @@ from io import BytesIO
 import base64
 import numpy as np
 import random
+import io
+import base64
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.utils
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from markupsafe import Markup
@@ -108,6 +113,20 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
                 )
             )
             WHERE NOT data->'customerInformation' ? 'country';
+        """)
+
+        # Add warranty status if not exists or if it's null
+        cursor.execute("""
+            UPDATE complaints 
+            SET data = jsonb_set(
+                data,
+                '{customerInformation,warrantyStatus}',
+                to_jsonb(
+                    CASE WHEN random() < 0.4 THEN 'true' ELSE 'false' END
+                )
+            )
+            WHERE NOT data->'customerInformation' ? 'warrantyStatus' 
+            OR data->'customerInformation'->>'warrantyStatus' IS NULL;
         """)
         conn.commit()
         
@@ -1368,268 +1387,201 @@ def unified_complaint(complaint_id):
 
 @app.route('/statistics')
 def statistics():
-    """Display comprehensive analytics dashboard."""
     try:
-        period = request.args.get('period', 'all')
+        conn = connect_to_db()
+        cursor = conn.cursor()
+
+        # Get time period filter from request
+        time_period = request.args.get('time_period', '30d')  # Default to last 30 days
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
-        conn = connect_to_db()
-        cursor = conn.cursor()
-        
-        # Get date range based on period
-        today = datetime.now().date()
+        # Calculate the date range based on time period or custom dates
         if start_date and end_date:
-            # Custom date range
-            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        elif period == '24h':
-            start_date = today - timedelta(days=1)
-            end_date = today
-        elif period == '1w':
-            start_date = today - timedelta(days=7)
-            end_date = today
-        elif period == '30d':
-            start_date = today - timedelta(days=30)
-            end_date = today
-        elif period == '3m':
-            start_date = today - timedelta(days=90)
-            end_date = today
-        elif period == '6m':
-            start_date = today - timedelta(days=180)
-            end_date = today
-        elif period == '1y':
-            start_date = today - timedelta(days=365)
-            end_date = today
-        else:  # 'all'
-            start_date = None
-            end_date = None
-
-        # Base query for filtering by date
-        date_filter = ""
-        if start_date and end_date:
-            date_filter = "WHERE (data->'complaintDetails'->>'dateOfComplaint')::date BETWEEN %s::date AND %s::date"
-            cursor.execute(f"SELECT COUNT(*) FROM complaints {date_filter}", (start_date, end_date))
+            date_filter = f"'{start_date}'::date"
+            end_date_filter = f"'{end_date}'::date"
+            time_period = f"custom:{start_date}:{end_date}"
         else:
-            cursor.execute("SELECT COUNT(*) FROM complaints")
+            if time_period == '24h':
+                date_filter = "CURRENT_DATE - INTERVAL '1 day'"
+            elif time_period == '1w':
+                date_filter = "CURRENT_DATE - INTERVAL '7 days'"
+            elif time_period == '30d':
+                date_filter = "CURRENT_DATE - INTERVAL '30 days'"
+            elif time_period == '3m':
+                date_filter = "CURRENT_DATE - INTERVAL '3 months'"
+            elif time_period == '6m':
+                date_filter = "CURRENT_DATE - INTERVAL '6 months'"
+            elif time_period == '1y':
+                date_filter = "CURRENT_DATE - INTERVAL '1 year'"
+            else:
+                date_filter = "CURRENT_DATE - INTERVAL '30 days'"  # Default to 30 days
+            end_date_filter = "CURRENT_DATE"
+
+        # Get total complaints count for the selected time period
+        cursor.execute(f'''
+            SELECT COUNT(*) FROM complaints 
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+        ''')
         total_complaints = cursor.fetchone()[0]
-        
-        # Get active warranty count with date filter
-        active_warranty_query = """
-            SELECT COUNT(*) FROM complaints
-            WHERE data->'warrantyInformation'->>'warrantyStatus' = 'Active'
-        """
-        if date_filter:
-            active_warranty_query += f" AND {date_filter.replace('WHERE', '')}"
-        cursor.execute(active_warranty_query, (start_date, end_date) if start_date and end_date else ())
-        active_warranty_count = cursor.fetchone()[0]
-        
-        # Get active complaints count with date filter
-        active_complaints_query = """
-            SELECT COUNT(*) FROM complaints
-            WHERE (data->'complaintDetails'->>'resolutionStatus' IS NULL 
-            OR data->'complaintDetails'->>'resolutionStatus' = 'Not Resolved')
-        """
-        if date_filter:
-            active_complaints_query += f" AND {date_filter.replace('WHERE', '')}"
-        cursor.execute(active_complaints_query, (start_date, end_date) if start_date and end_date else ())
-        active_complaints_count = cursor.fetchone()[0]
-        
-        # Get active complaints with date filter
-        active_complaints_list_query = """
-            SELECT id, data FROM complaints
-            WHERE (data->'complaintDetails'->>'resolutionStatus' IS NULL 
-            OR data->'complaintDetails'->>'resolutionStatus' = 'Not Resolved')
-        """
-        if date_filter:
-            active_complaints_list_query += f" AND {date_filter.replace('WHERE', '')}"
-        active_complaints_list_query += " ORDER BY (data->'complaintDetails'->>'dateOfComplaint')::timestamp DESC LIMIT 5"
-        cursor.execute(active_complaints_list_query, (start_date, end_date) if start_date and end_date else ())
-        active_complaints = cursor.fetchall()
 
-        # Get complaint status distribution
-        status_dist_query = """
+        # Get warranty status distribution for the selected time period
+        cursor.execute(f'''
             SELECT 
                 CASE 
-                    WHEN data->'complaintDetails'->>'resolutionStatus' IS NULL THEN 'Not Resolved'
-                    WHEN data->'complaintDetails'->>'resolutionStatus' = '' THEN 'Not Resolved'
-                    ELSE data->'complaintDetails'->>'resolutionStatus'
-                END as status,
-                COUNT(*) as count
-            FROM complaints
-        """
-        if date_filter:
-            status_dist_query += f" {date_filter}"
-        status_dist_query += " GROUP BY status ORDER BY count DESC"
-        cursor.execute(status_dist_query, (start_date, end_date) if start_date and end_date else ())
-        status_distribution = cursor.fetchall()
-
-        # Get complaint status trends over time
-        status_trend_query = """
-            WITH dates AS (
-                SELECT generate_series(
-                    CASE 
-                        WHEN %s::date IS NULL THEN current_date - interval '30 days'
-                        ELSE %s::date
-                    END,
-                    CASE 
-                        WHEN %s::date IS NULL THEN current_date
-                        ELSE %s::date
-                    END,
-                    '1 day'::interval
-                )::date as date
-            ),
-            status_counts AS (
-                SELECT 
-                    (data->'complaintDetails'->>'dateOfComplaint')::date as complaint_date,
-                    CASE 
-                        WHEN data->'complaintDetails'->>'resolutionStatus' IS NULL THEN 'Not Resolved'
-                        WHEN data->'complaintDetails'->>'resolutionStatus' = '' THEN 'Not Resolved'
-                        ELSE data->'complaintDetails'->>'resolutionStatus'
-                    END as status,
-                    COUNT(*) as count
-                FROM complaints
-                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date BETWEEN 
-                    CASE 
-                        WHEN %s::date IS NULL THEN current_date - interval '30 days'
-                        ELSE %s::date
-                    END AND
-                    CASE 
-                        WHEN %s::date IS NULL THEN current_date
-                        ELSE %s::date
-                    END
-                GROUP BY complaint_date, status
-            )
-            SELECT 
-                d.date,
-                COALESCE(SUM(CASE WHEN s.status = 'Not Resolved' THEN s.count ELSE 0 END), 0) as not_resolved,
-                COALESCE(SUM(CASE WHEN s.status = 'Resolved' THEN s.count ELSE 0 END), 0) as resolved,
-                COALESCE(SUM(CASE WHEN s.status = 'Canceled' THEN s.count ELSE 0 END), 0) as canceled
-            FROM dates d
-            LEFT JOIN status_counts s ON d.date = s.complaint_date
-            GROUP BY d.date
-            ORDER BY d.date
-        """
-        cursor.execute(status_trend_query, (start_date, start_date, end_date, end_date, 
-                                          start_date, start_date, end_date, end_date))
-        status_trends = cursor.fetchall()
-
-        # Create status trend chart
-        plt.figure(figsize=(12, 6))
-        dates = [row[0] for row in status_trends]
-        not_resolved = [row[1] for row in status_trends]
-        resolved = [row[2] for row in status_trends]
-        canceled = [row[3] for row in status_trends]
-
-        plt.plot(dates, not_resolved, marker='o', label='Not Resolved', color='#ffc107')
-        plt.plot(dates, resolved, marker='o', label='Resolved', color='#28a745')
-        plt.plot(dates, canceled, marker='o', label='Canceled', color='#dc3545')
-
-        plt.title('Complaint Status Trends')
-        plt.xlabel('Date')
-        plt.ylabel('Number of Complaints')
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.xticks(rotation=45)
-
-        # Convert status trend chart to base64
-        status_trend_img = BytesIO()
-        plt.savefig(status_trend_img, format='png', bbox_inches='tight')
-        status_trend_img.seek(0)
-        status_trend_chart = base64.b64encode(status_trend_img.getvalue()).decode()
-        plt.close()
-
-        # Get warranty distribution with date filter
-        warranty_dist_query = """
-            SELECT 
-                CASE 
-                    WHEN data->'warrantyInformation'->>'warrantyStatus' = 'Active' THEN 'Under Warranty'
-                    ELSE 'Out of Warranty'
+                    WHEN (data->'customerInformation'->>'warrantyStatus')::text = 'true' THEN 'Active'
+                    WHEN (data->'customerInformation'->>'warrantyStatus')::text = 'false' THEN 'Expired'
+                    ELSE 'Unknown'
                 END as warranty_status,
                 COUNT(*) as count
             FROM complaints
-        """
-        if date_filter:
-            warranty_dist_query += f" {date_filter}"
-        warranty_dist_query += " GROUP BY warranty_status"
-        cursor.execute(warranty_dist_query, (start_date, end_date) if start_date and end_date else ())
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+            GROUP BY 
+                CASE 
+                    WHEN (data->'customerInformation'->>'warrantyStatus')::text = 'true' THEN 'Active'
+                    WHEN (data->'customerInformation'->>'warrantyStatus')::text = 'false' THEN 'Expired'
+                    ELSE 'Unknown'
+                END
+            ORDER BY warranty_status
+        ''')
         warranty_distribution = cursor.fetchall()
-        
-        # Get complaint distribution by issue with date filter
-        problem_dist_query = """
-            SELECT jsonb_array_elements_text(data->'complaintDetails'->'natureOfProblem') as issue, COUNT(*) as count
+
+        # Get active warranty count for the selected time period
+        cursor.execute(f'''
+            SELECT COUNT(*) FROM complaints 
+            WHERE (data->'customerInformation'->>'warrantyStatus')::text = 'true'
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+        ''')
+        active_warranty = cursor.fetchone()[0]
+
+        # Get resolution rate for the selected time period
+        cursor.execute(f'''
+            SELECT 
+                COUNT(*) FILTER (WHERE (data->'complaintDetails'->>'resolutionStatus')::text = 'Resolved') * 100.0 / NULLIF(COUNT(*), 0) as resolution_rate
             FROM complaints
-        """
-        if date_filter:
-            problem_dist_query += f" {date_filter}"
-        problem_dist_query += " GROUP BY issue ORDER BY count DESC LIMIT 10"
-        cursor.execute(problem_dist_query, (start_date, end_date) if start_date and end_date else ())
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+        ''')
+        resolution_rate = cursor.fetchone()[0] or 0.0  # Default to 0.0 if no complaints
+
+        # Get problem distribution for the selected time period
+        cursor.execute(f'''
+            SELECT 
+                data->'complaintDetails'->>'problemType' as problem_type,
+                COUNT(*) as count
+            FROM complaints
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+            GROUP BY data->'complaintDetails'->>'problemType'
+            ORDER BY count DESC
+        ''')
         problem_distribution = cursor.fetchall()
-        
-        # Get complaints by timeframe for trend analysis
-        if start_date and end_date:
-            complaints_by_timeframe = get_complaints_by_timeframe(start_date, end_date)
-        else:
-            # If no date filter, show last 30 days
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
-            complaints_by_timeframe = get_complaints_by_timeframe(start_date, end_date)
-        
-        # Create all charts
-        problem_chart = create_issue_chart(problem_distribution, "Top 10 Most Common Issues")
-        warranty_chart = create_warranty_chart(warranty_distribution, "Warranty Status Distribution")
-        time_chart = create_time_chart(conn, 'monthly', "Monthly Complaint Trends")
-        
-        # Create trend chart for the selected period
-        plt.figure(figsize=(10, 6))
-        dates = [row[0] for row in complaints_by_timeframe]
-        counts = [row[1] for row in complaints_by_timeframe]
-        
-        # Generate synthetic data for demonstration
-        x_values = pd.date_range(start=start_date, end=end_date, freq='D')
-        synthetic_counts = [random.randint(0, 10) for _ in range(len(x_values))]
-        
-        plt.plot_date(x_values, synthetic_counts, marker='o', linestyle='-', linewidth=2,
-                     color='#007bff', markersize=6)
-        plt.title(f'Complaint Trends ({period.title()} Period)')
-        plt.xlabel('Date')
-        plt.ylabel('Number of Complaints')
-        plt.grid(True, linestyle='--', alpha=0.7)
-        
-        # Convert plot to base64 string
-        img = BytesIO()
-        plt.savefig(img, format='png', bbox_inches='tight')
-        img.seek(0)
-        trend_chart = base64.b64encode(img.getvalue()).decode()
-        plt.close()
-        
-        # Convert all charts to base64
-        problem_chart_base64 = base64.b64encode(problem_chart.getvalue()).decode('utf-8')
-        warranty_chart_base64 = base64.b64encode(warranty_chart.getvalue()).decode('utf-8')
-        time_chart_base64 = base64.b64encode(time_chart.getvalue()).decode('utf-8')
-        
+
+        # Get daily trend for the selected time period
+        cursor.execute(f'''
+            SELECT 
+                (data->'complaintDetails'->>'dateOfComplaint')::date as date,
+                COUNT(*) as count
+            FROM complaints
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+            GROUP BY (data->'complaintDetails'->>'dateOfComplaint')::date
+            ORDER BY date
+        ''')
+        daily_trend = cursor.fetchall()
+
+        # Get monthly trend for the selected time period
+        cursor.execute(f'''
+            SELECT 
+                DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::date) as month,
+                COUNT(*) as count
+            FROM complaints
+            WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= {date_filter}
+            AND (data->'complaintDetails'->>'dateOfComplaint')::date <= {end_date_filter}
+            GROUP BY DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::date)
+            ORDER BY month
+        ''')
+        monthly_trend = cursor.fetchall()
+
+        # Create interactive plots using Plotly
+        # Problem Distribution Plot
+        problem_fig = px.pie(
+            values=[row[1] for row in problem_distribution],
+            names=[row[0] for row in problem_distribution],
+            title='Problem Distribution',
+            hole=0.4
+        )
+        problem_fig.update_layout(
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        problem_plot = json.dumps(problem_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+        # Warranty Distribution Plot
+        warranty_fig = px.pie(
+            values=[row[1] for row in warranty_distribution],
+            names=[row[0] for row in warranty_distribution],
+            title='Warranty Status Distribution',
+            hole=0.4
+        )
+        warranty_fig.update_layout(
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        warranty_plot = json.dumps(warranty_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+        # Daily Trend Plot
+        daily_dates = [row[0] for row in daily_trend]
+        daily_counts = [row[1] for row in daily_trend]
+        daily_fig = go.Figure()
+        daily_fig.add_trace(go.Scatter(
+            x=daily_dates,
+            y=daily_counts,
+            mode='lines+markers',
+            name='Daily Complaints'
+        ))
+        daily_fig.update_layout(
+            title='Daily Complaints',
+            xaxis_title='Date',
+            yaxis_title='Number of Complaints'
+        )
+        daily_plot = json.dumps(daily_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+        # Monthly Trend Plot
+        monthly_dates = [row[0] for row in monthly_trend]
+        monthly_counts = [row[1] for row in monthly_trend]
+        monthly_fig = go.Figure()
+        monthly_fig.add_trace(go.Bar(
+            x=monthly_dates,
+            y=monthly_counts,
+            name='Monthly Complaints'
+        ))
+        monthly_fig.update_layout(
+            title='Monthly Complaints Trend',
+            xaxis_title='Month',
+            yaxis_title='Number of Complaints'
+        )
+        monthly_plot = json.dumps(monthly_fig, cls=plotly.utils.PlotlyJSONEncoder)
+
         cursor.close()
         conn.close()
-        
+
         return render_template('statistics.html',
-                             recent_complaints=active_complaints,
-                             problem_distribution=problem_distribution,
-                             warranty_distribution=warranty_distribution,
-                             trend_chart=trend_chart,
-                             problem_chart=problem_chart_base64,
-                             warranty_chart=warranty_chart_base64,
-                             time_chart=time_chart_base64,
-                             total_complaints=total_complaints,
-                             active_warranty=active_warranty_count,
-                             recent_complaints_count=active_complaints_count,
-                             status_distribution=status_distribution,
-                             status_trend_chart=status_trend_chart,
-                             period=period)
-                             
+                           total_complaints=total_complaints,
+                           active_warranty=active_warranty,
+                           resolution_rate=resolution_rate,
+                           problem_plot=problem_plot,
+                           warranty_plot=warranty_plot,
+                           daily_plot=daily_plot,
+                           monthly_plot=monthly_plot,
+                           time_period=time_period)
+
     except Exception as e:
-        print(f"Error generating statistics: {str(e)}")
-        flash('Error generating statistics', 'danger')
-        return redirect(url_for('list_complaints'))
+        print(f"Error in statistics route: {e}")
+        return render_template('error.html', error=str(e))
 
 if __name__ == '__main__':
     # Ensure templates directory exists
