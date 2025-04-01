@@ -178,24 +178,28 @@ document.addEventListener('DOMContentLoaded', function() {
             yanchor: 'middle',
             orientation: 'v'
         },
-        width: 450,
-        height: 350,
-        margin: { t: 30, b: 30, l: 60, r: 100 }
+        width: 700,
+        height: 500,
+        margin: { t: 50, b: 50, l: 50, r: 150 }
     };
 
     // Problem Distribution Plot
-    var problemData = {{ problem_plot | safe }};
-    Plotly.newPlot('problem_distribution', problemData.data, {
-        ...problemData.layout,
-        ...pieLayout
-    }, plotConfig);
+    const problemData = {{ problem_plot | safe }};
+    const problemLayout = Object.assign({}, problemData.layout, pieLayout, {
+        width: 600,
+        height: 400,
+        margin: { t: 50, b: 50, l: 50, r: 150 }
+    });
+    Plotly.newPlot('problem_distribution', problemData.data, problemLayout, plotConfig);
 
     // Warranty Distribution Plot
-    var warrantyData = {{ warranty_plot | safe }};
-    Plotly.newPlot('warranty_distribution', warrantyData.data, {
-        ...warrantyData.layout,
-        ...pieLayout
-    }, plotConfig);
+    const warrantyData = {{ warranty_plot | safe }};
+    const warrantyLayout = Object.assign({}, warrantyData.layout, pieLayout, {
+        width: 500,
+        height: 400,
+        margin: { t: 50, b: 50, l: 50, r: 50 }
+    });
+    Plotly.newPlot('warranty_distribution', warrantyData.data, warrantyLayout, plotConfig);
 
     // Daily Trend Plot
     var dailyData = {{ daily_plot | safe }};

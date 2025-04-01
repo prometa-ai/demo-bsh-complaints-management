@@ -1599,8 +1599,8 @@ def statistics():
                     xanchor="right",
                     x=1.2
                 ),
-                height=600,
-                width=900,
+                height=500,
+                width=700,
                 margin=dict(t=50, b=50, l=50, r=150),
                 annotations=[dict(
                     text='Distribution of Analysis Result categories from technical assessments.<br>"Pending Analysis" indicates complaints without technical notes.',
@@ -1649,8 +1649,8 @@ def statistics():
             warranty_fig.update_layout(
                 showlegend=True,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                height=500,
-                width=800,
+                height=400,
+                width=500,
                 margin=dict(t=50, b=50, l=50, r=50)
             )
         else:
