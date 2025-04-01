@@ -2,7 +2,10 @@
 
 {% block content %}
 <div class="container-fluid px-4">
-    <h1 class="mb-4">Complaints Statistics</h1>
+    <div class="d-flex align-items-center mb-4">
+        <img src="{{ url_for('static', filename='images/bsh_logo.png') }}" alt="BSH Logo" style="height: 40px; margin-right: 15px;">
+        <h1 class="mb-0">Complaints Statistics</h1>
+    </div>
     
     <!-- Time Period and Custom Date Filter -->
     <div class="row mb-4">
