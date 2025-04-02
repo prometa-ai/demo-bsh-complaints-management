@@ -1347,10 +1347,11 @@ def list_complaints():
             country=country,
             status=status,
             warranty=warranty,
-            ai_category=ai_category
+            ai_category=ai_category,
+            items_per_page=100  # Increase to show 100 items per page
         )
         
-        total_pages = (total_count + 9) // 10  # 10 items per page
+        total_pages = (total_count + 99) // 100  # 100 items per page
         
         return render_template('complaints.html',
                              complaints=complaints,

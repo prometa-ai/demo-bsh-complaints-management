@@ -166,114 +166,131 @@
     </div>
 
     {% if complaints %}
+        <div class="row mb-2">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="text-muted mb-0">
+                        Showing up to 100 complaints per page ({{ complaints|length }} shown). 
+                        <span class="badge bg-primary">{{ total_count }} total</span>
+                    </p>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary" id="toggleTableHeight">
+                            <i class="fas fa-arrows-alt-v"></i> Toggle Table Height
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="row">
             <div class="col-md-12">
-                <table class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Date</th>
-                            <th>Customer</th>
-                            <th>Model</th>
-                            <th>Country</th>
-                            <th>Status</th>
-                            <th>Warranty</th>
-                            <th>Technical Notes</th>
-                            <th>AI Category</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for complaint in complaints %}
-                        <tr>
-                            <td>{{ complaint[0] }}</td>
-                            <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'].split('T')[0] }}</td>
-                            <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
-                            <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
-                            <td>
-                                {% set country = complaint[1]['customerInformation']['country'] %}
-                                {% if country == 'Norway' %}
-                                    🇳🇴
-                                {% elif country == 'Spain' %}
-                                    🇪🇸
-                                {% elif country == 'Bulgaria' %}
-                                    🇧🇬
-                                {% elif country == 'Italy' %}
-                                    🇮🇹
-                                {% elif country == 'Portugal' %}
-                                    🇵🇹
-                                {% elif country == 'Romania' %}
-                                    🇷🇴
-                                {% elif country == 'Turkey' %}
-                                    🇹🇷
-                                {% elif country == 'Egypt' %}
-                                    🇪🇬
-                                {% elif country == 'Kuwait' %}
-                                    🇰🇼
-                                {% elif country == 'United Arab Emirates' %}
-                                    🇦🇪
-                                {% endif %}
-                                <span class="badge bg-info">{{ country }}</span>
-                            </td>
-                            <td>
-                                <span class="badge {% if complaint[1]['complaintDetails'].get('resolutionStatus') == 'Resolved' %}bg-success
-                                                         {% elif complaint[1]['complaintDetails'].get('resolutionStatus') == 'Canceled' %}bg-danger
-                                                         {% else %}bg-warning{% endif %}">
-                                    {{ complaint[1]['complaintDetails'].get('resolutionStatus', 'Not Resolved') }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="badge {% if complaint[1]['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                                    {{ complaint[1]['warrantyInformation']['warrantyStatus'] }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if complaint[2] %}
-                                    <span class="badge bg-info">
-                                        <i class="fas fa-tools me-1"></i>Has Notes
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-striped table-hover">
+                        <thead class="sticky-top bg-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Date</th>
+                                <th>Customer</th>
+                                <th>Model</th>
+                                <th>Country</th>
+                                <th>Status</th>
+                                <th>Warranty</th>
+                                <th>Technical Notes</th>
+                                <th>AI Category</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for complaint in complaints %}
+                            <tr>
+                                <td>{{ complaint[0] }}</td>
+                                <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'].split('T')[0] }}</td>
+                                <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
+                                <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
+                                <td>
+                                    {% set country = complaint[1]['customerInformation']['country'] %}
+                                    {% if country == 'Norway' %}
+                                        🇳🇴
+                                    {% elif country == 'Spain' %}
+                                        🇪🇸
+                                    {% elif country == 'Bulgaria' %}
+                                        🇧🇬
+                                    {% elif country == 'Italy' %}
+                                        🇮🇹
+                                    {% elif country == 'Portugal' %}
+                                        🇵🇹
+                                    {% elif country == 'Romania' %}
+                                        🇷🇴
+                                    {% elif country == 'Turkey' %}
+                                        🇹🇷
+                                    {% elif country == 'Egypt' %}
+                                        🇪🇬
+                                    {% elif country == 'Kuwait' %}
+                                        🇰🇼
+                                    {% elif country == 'United Arab Emirates' %}
+                                        🇦🇪
+                                    {% endif %}
+                                    <span class="badge bg-info">{{ country }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge {% if complaint[1]['complaintDetails'].get('resolutionStatus') == 'Resolved' %}bg-success
+                                                             {% elif complaint[1]['complaintDetails'].get('resolutionStatus') == 'Canceled' %}bg-danger
+                                                             {% else %}bg-warning{% endif %}">
+                                        {{ complaint[1]['complaintDetails'].get('resolutionStatus', 'Not Resolved') }}
                                     </span>
-                                {% else %}
-                                    <span class="badge bg-secondary">
-                                        <i class="fas fa-times me-1"></i>No Notes
+                                </td>
+                                <td>
+                                    <span class="badge {% if complaint[1]['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ complaint[1]['warrantyInformation']['warrantyStatus'] }}
                                     </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if complaint[2] %}
-                                    {% if complaint[2].get('ai_analysis') %}
-                                        {% set ai_analysis = complaint[2].get('ai_analysis') %}
-                                        {% if ai_analysis.get('openai_category') and ai_analysis.get('openai_category') != 'NO AI PREDICTION AVAILABLE' and '(NO OPENAI PREDICTION)' not in ai_analysis.get('openai_category') %}
-                                            {% set category = ai_analysis.get('openai_category') %}
-                                            <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(category, '#808080') }}; color: white;">
-                                                <i class="fas fa-robot me-1"></i>{{ category }}
-                                            </span>
+                                </td>
+                                <td>
+                                    {% if complaint[2] %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-tools me-1"></i>Has Notes
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-times me-1"></i>No Notes
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if complaint[2] %}
+                                        {% if complaint[2].get('ai_analysis') %}
+                                            {% set ai_analysis = complaint[2].get('ai_analysis') %}
+                                            {% if ai_analysis.get('openai_category') and ai_analysis.get('openai_category') != 'NO AI PREDICTION AVAILABLE' and '(NO OPENAI PREDICTION)' not in ai_analysis.get('openai_category') %}
+                                                {% set category = ai_analysis.get('openai_category') %}
+                                                <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(category, '#808080') }}; color: white;">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% else %}
+                                                <span class="badge text-bg-warning">
+                                                    <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
+                                                </span>
+                                            {% endif %}
                                         {% else %}
                                             <span class="badge text-bg-warning">
                                                 <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
                                             </span>
                                         {% endif %}
                                     {% else %}
-                                        <span class="badge text-bg-warning">
-                                            <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
+                                        <span class="badge text-bg-secondary">
+                                            <i class="fas fa-minus me-1"></i>No Analysis
                                         </span>
                                     {% endif %}
-                                {% else %}
-                                    <span class="badge text-bg-secondary">
-                                        <i class="fas fa-minus me-1"></i>No Analysis
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="btn-group" role="group">
-                                    <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('unified_complaint', complaint_id=complaint[0]) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -286,11 +303,36 @@
                     </li>
                 {% endif %}
                 
-                {% for p in range(1, total_pages + 1) %}
+                {% set start_page = [1, page - 2]|max %}
+                {% set end_page = [total_pages, page + 2]|min %}
+                
+                {% if start_page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('list_complaints', page=1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">1</a>
+                    </li>
+                    {% if start_page > 2 %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    {% endif %}
+                {% endif %}
+                
+                {% for p in range(start_page, end_page + 1) %}
                     <li class="page-item {% if p == page %}active{% endif %}">
                         <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">{{ p }}</a>
                     </li>
                 {% endfor %}
+                
+                {% if end_page < total_pages %}
+                    {% if end_page < total_pages - 1 %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    {% endif %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('list_complaints', page=total_pages, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">{{ total_pages }}</a>
+                    </li>
+                {% endif %}
                 
                 {% if page < total_pages %}
                     <li class="page-item">
@@ -315,4 +357,23 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/complaint-handlers.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle table height between fixed and auto
+        const toggleButton = document.getElementById('toggleTableHeight');
+        const tableContainer = document.querySelector('.table-responsive');
+        
+        if (toggleButton && tableContainer) {
+            toggleButton.addEventListener('click', function() {
+                if (tableContainer.style.maxHeight) {
+                    tableContainer.style.maxHeight = '';
+                    toggleButton.innerHTML = '<i class="fas fa-compress-alt"></i> Limit Height';
+                } else {
+                    tableContainer.style.maxHeight = '600px';
+                    toggleButton.innerHTML = '<i class="fas fa-arrows-alt-v"></i> Expand Height';
+                }
+            });
+        }
+    });
+</script>
 {% endblock %} 
