@@ -133,7 +133,7 @@ def connect_to_db():
         print(f"Database connection error: {e}")
         raise
 
-def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None):
+def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None):
     """Get all complaints with pagination and filtering."""
     try:
         conn = connect_to_db()
@@ -154,46 +154,23 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             WHERE 1=1
         """
         
-        # Add country field if not exists
-        cursor.execute("""
-            UPDATE complaints 
-            SET data = jsonb_set(
-                data,
-                '{customerInformation,country}',
-                to_jsonb(
-                    CASE (random() * 9)::int
-                        WHEN 0 THEN 'Norway'
-                        WHEN 1 THEN 'Spain'
-                        WHEN 2 THEN 'Bulgaria'
-                        WHEN 3 THEN 'Italy'
-                        WHEN 4 THEN 'Portugal'
-                        WHEN 5 THEN 'Romania'
-                        WHEN 6 THEN 'Turkey'
-                        WHEN 7 THEN 'Egypt'
-                        WHEN 8 THEN 'Kuwait'
-                        ELSE 'United Arab Emirates'
-                    END
-                )
-            )
-            WHERE NOT data->'customerInformation' ? 'country';
-        """)
-
-        # Add warranty status if not exists or if it's null
-        cursor.execute("""
-            UPDATE complaints 
-            SET data = jsonb_set(
-                data,
-                '{customerInformation,warrantyStatus}',
-                to_jsonb(
-                    CASE WHEN random() < 0.4 THEN 'true' ELSE 'false' END
-                )
-            )
-            WHERE NOT data->'customerInformation' ? 'warrantyStatus' 
-            OR data->'customerInformation'->>'warrantyStatus' IS NULL;
-        """)
-        conn.commit()
+        params = []
         
-        # Continue with the existing query logic
+        # Add country filter if provided
+        if country:
+            query += " AND c.data->'customerInformation'->>'country' = %s"
+            params.append(country)
+            
+        # Add status filter if provided
+        if status:
+            query += " AND c.data->'complaintDetails'->>'resolutionStatus' = %s"
+            params.append(status)
+            
+        # Add warranty filter if provided
+        if warranty:
+            query += " AND c.data->'warrantyInformation'->>'warrantyStatus' = %s"
+            params.append(warranty)
+        
         # Add time period filter
         if time_period:
             if time_period == '24h':
@@ -210,7 +187,8 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
                 query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 year'"
             elif time_period.startswith('custom:'):
                 start_date, end_date = time_period.split(':')[1:]
-                query += f" AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN '{start_date}'::timestamp AND '{end_date}'::timestamp"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s::timestamp AND %s::timestamp"
+                params.extend([start_date, end_date])
         
         # Add technical notes filter
         if has_notes:
@@ -228,11 +206,7 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
                     )
                 """
                 search_pattern = f"%{search}%"
-                params = [search_pattern, search_pattern, search_pattern]
-            else:
-                params = []
-        else:
-            params = []
+                params.extend([search_pattern, search_pattern, search_pattern])
         
         # Get total count
         count_query = f"""
@@ -240,24 +214,15 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             FROM ({query}) AS filtered_complaints
         """
         
-        if search:
-            cursor.execute(count_query, params)
-        else:
-            cursor.execute(count_query)
-            
+        cursor.execute(count_query, params)
         total_count = cursor.fetchone()[0]
         
         # Add pagination
         query += " ORDER BY (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp DESC"
         query += " LIMIT %s OFFSET %s"
+        params.extend([items_per_page, (page - 1) * items_per_page])
         
-        # Add pagination parameters
-        if search:
-            params.extend([items_per_page, (page - 1) * items_per_page])
-            cursor.execute(query, params)
-        else:
-            cursor.execute(query, [items_per_page, (page - 1) * items_per_page])
-        
+        cursor.execute(query, params)
         complaints = cursor.fetchall()
         
         cursor.close()
@@ -1327,27 +1292,63 @@ def index():
 
 @app.route('/complaints')
 def list_complaints():
-    logger.debug("Accessed complaints listing route")
-    page = request.args.get('page', 1, type=int)
-    search = request.args.get('search', '')
-    time_period = request.args.get('time_period')
-    has_notes = request.args.get('has_notes') == 'true'
-    
-    # Handle custom date range
-    if not time_period and request.args.get('start_date') and request.args.get('end_date'):
-        time_period = f"custom:{request.args.get('start_date')}:{request.args.get('end_date')}"
-    
-    complaints, total_count = get_all_complaints(page=page, search=search, time_period=time_period, has_notes=has_notes)
-    total_pages = (total_count + 9) // 10  # 10 items per page
-    
-    return render_template('complaints.html',
-                         complaints=complaints,
-                         page=page,
-                         total_pages=total_pages,
-                         search=search,
-                         time_period=time_period,
-                         has_notes=has_notes,
-                         total_count=total_count)
+    """List complaints with filtering and pagination."""
+    try:
+        logger.debug("Accessed complaints listing route")
+        page = request.args.get('page', 1, type=int)
+        search = request.args.get('search', '')
+        time_period = request.args.get('time_period')
+        has_notes = request.args.get('has_notes') == 'true'
+        country = request.args.get('country', '')
+        status = request.args.get('status', '')
+        warranty = request.args.get('warranty', '')  # Add warranty filter parameter
+        
+        # Handle custom date range
+        if not time_period and request.args.get('start_date') and request.args.get('end_date'):
+            time_period = f"custom:{request.args.get('start_date')}:{request.args.get('end_date')}"
+        
+        # Get unique countries for the dropdown
+        conn = connect_to_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT data->'customerInformation'->>'country' as country
+            FROM complaints
+            WHERE data->'customerInformation'->>'country' IS NOT NULL
+            ORDER BY country
+        """)
+        countries = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        
+        complaints, total_count = get_all_complaints(
+            page=page, 
+            search=search, 
+            time_period=time_period, 
+            has_notes=has_notes,
+            country=country,
+            status=status,
+            warranty=warranty  # Pass warranty filter to get_all_complaints
+        )
+        
+        total_pages = (total_count + 9) // 10  # 10 items per page
+        
+        return render_template('complaints.html',
+                             complaints=complaints,
+                             page=page,
+                             total_pages=total_pages,
+                             search=search,
+                             time_period=time_period,
+                             has_notes=has_notes,
+                             total_count=total_count,
+                             countries=countries,
+                             selected_country=country,
+                             selected_status=status,
+                             selected_warranty=warranty)  # Pass selected warranty to template
+                             
+    except Exception as e:
+        logger.error(f"Error in list_complaints: {e}")
+        flash('An error occurred while loading complaints.', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/complaints/<int:complaint_id>/unified', methods=['GET', 'POST'])
 def unified_complaint(complaint_id):

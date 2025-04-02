@@ -37,10 +37,34 @@
         <div class="card-header">
             <form action="{{ url_for('list_complaints') }}" method="GET" class="mb-2">
                 <div class="row g-2">
-                    <div class="col-md-8">
+                    <div class="col-md-3">
                         <input type="text" name="search" class="form-control" placeholder="Search complaints or customers..." value="{{ search }}">
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <select name="country" class="form-control">
+                            <option value="">All Countries</option>
+                            {% for country in countries %}
+                                <option value="{{ country }}" {% if country == selected_country %}selected{% endif %}>{{ country }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="status" class="form-control">
+                            <option value="">All Statuses</option>
+                            <option value="Resolved" {% if selected_status == 'Resolved' %}selected{% endif %}>Resolved</option>
+                            <option value="In Progress" {% if selected_status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="Canceled" {% if selected_status == 'Canceled' %}selected{% endif %}>Canceled</option>
+                            <option value="Not Resolved" {% if selected_status == 'Not Resolved' %}selected{% endif %}>Not Resolved</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="warranty" class="form-control">
+                            <option value="">All Warranty</option>
+                            <option value="Active" {% if selected_warranty == 'Active' %}selected{% endif %}>Active</option>
+                            <option value="Expired" {% if selected_warranty == 'Expired' %}selected{% endif %}>Expired</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
                         <button type="submit" class="btn btn-primary w-100">Search</button>
                     </div>
                 </div>
@@ -111,8 +135,17 @@
                         {% else %}
                             Showing all complaints
                         {% endif %}
+                        {% if selected_country %}
+                            from {{ selected_country }}
+                        {% endif %}
+                        {% if selected_status %}
+                            with status "{{ selected_status }}"
+                        {% endif %}
+                        {% if selected_warranty %}
+                            with {{ selected_warranty }} warranty
+                        {% endif %}
                         {% if has_notes %}
-                            <span class="ms-2">with technical notes</span>
+                            with technical notes
                         {% endif %}
                         <span class="badge bg-primary ms-2">{{ total_count }} complaints</span>
                     </div>
@@ -200,39 +233,21 @@
                                         {% set ai_analysis = complaint[2].get('ai_analysis') %}
                                         {% if ai_analysis.get('openai_category') and ai_analysis.get('openai_category') != 'NO AI PREDICTION AVAILABLE' %}
                                             {% set category = ai_analysis.get('openai_category') %}
-                                            {% if category == 'Product Quality' %}
-                                                <span class="badge bg-danger">
-                                                    <i class="fas fa-robot me-1"></i>{{ category }}
-                                                </span>
-                                            {% elif category == 'Customer Service' %}
-                                                <span class="badge bg-warning">
-                                                    <i class="fas fa-robot me-1"></i>{{ category }}
-                                                </span>
-                                            {% elif category == 'Installation' %}
-                                                <span class="badge bg-info">
-                                                    <i class="fas fa-robot me-1"></i>{{ category }}
-                                                </span>
-                                            {% elif category == 'Warranty' %}
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-robot me-1"></i>{{ category }}
-                                                </span>
-                                            {% else %}
-                                                <span class="badge bg-primary">
-                                                    <i class="fas fa-robot me-1"></i>{{ category }}
-                                                </span>
-                                            {% endif %}
+                                            <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(category, '#808080') }}; color: white;">
+                                                <i class="fas fa-robot me-1"></i>{{ category }}
+                                            </span>
                                         {% else %}
-                                            <span class="badge bg-warning">
+                                            <span class="badge text-bg-warning">
                                                 <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
                                             </span>
                                         {% endif %}
                                     {% else %}
-                                        <span class="badge bg-warning">
+                                        <span class="badge text-bg-warning">
                                             <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
                                         </span>
                                     {% endif %}
                                 {% else %}
-                                    <span class="badge bg-secondary">
+                                    <span class="badge text-bg-secondary">
                                         <i class="fas fa-minus me-1"></i>No Analysis
                                     </span>
                                 {% endif %}
@@ -256,7 +271,7 @@
             <ul class="pagination justify-content-center">
                 {% if page > 1 %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period, has_notes=has_notes) }}">Previous</a>
+                    <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty) }}">Previous</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled">
@@ -266,13 +281,13 @@
                 
                 {% for p in range(max(1, page-2), min(page+3, total_pages+1)) %}
                 <li class="page-item {% if p == page %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes) }}">{{ p }}</a>
+                    <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty) }}">{{ p }}</a>
                 </li>
                 {% endfor %}
                 
                 {% if page < total_pages %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period, has_notes=has_notes) }}">Next</a>
+                    <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty) }}">Next</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled">
