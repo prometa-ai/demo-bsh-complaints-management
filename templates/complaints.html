@@ -209,11 +209,11 @@
                                 <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
                                 <td>
                                     {% set model = complaint[1]['productInformation']['modelNumber'] %}
-                                    {% if model.startswith('BSH') %}
+                                    {% if model.startswith('BSH-R') and model[-1]|int is divisible by(3) %}
                                         <span class="badge bg-danger">Bosch</span>
-                                    {% elif model.startswith('SEM') %}
+                                    {% elif model.startswith('BSH-R') and model[-1]|int is divisible by(2) %}
                                         <span class="badge bg-primary">Siemens</span>
-                                    {% elif model.startswith('PRO') %}
+                                    {% elif model.startswith('BSH-R') %}
                                         <span class="badge bg-success">Profilo</span>
                                     {% else %}
                                         <span class="badge bg-secondary">Unknown</span>
