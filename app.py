@@ -2185,6 +2185,146 @@ def export_complaints():
     
     return response
 
+@app.route('/talk_with_data')
+def talk_with_data():
+    """Render the Talk with Data page."""
+    return render_template('talk_with_data.html')
+
+@app.route('/talk_with_data/query', methods=['POST'])
+def process_data_query():
+    """Process natural language queries about the complaint data."""
+    conn = None
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        
+        if not question:
+            return jsonify({'answer': 'Please provide a question.'})
+        
+        # Connect to the database
+        logger.debug("Connecting to database...")
+        conn = connect_to_db()
+        if not conn:
+            logger.error("Failed to establish database connection")
+            return jsonify({'answer': 'Sorry, there was an error connecting to the database. Please try again.'})
+            
+        cursor = conn.cursor()
+        
+        # Get the current date for time-based queries
+        current_date = datetime.now().date()
+        last_month_start = current_date - timedelta(days=30)
+        
+        logger.debug(f"Querying data from {last_month_start} to {current_date}")
+        
+        # Get complaint statistics for the last month
+        try:
+            cursor.execute("""
+                WITH ai_categories AS (
+                    SELECT 
+                        c.id,
+                        COALESCE(
+                            (
+                                SELECT 
+                                    (tn.data->'ai_analysis'->>'openai_category')::text
+                                FROM technical_notes tn 
+                                WHERE tn.complaint_id = c.id 
+                                AND tn.data->'ai_analysis'->>'openai_category' IS NOT NULL
+                                AND tn.data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+                                ORDER BY tn.id DESC 
+                                LIMIT 1
+                            ),
+                            'Pending Analysis'
+                        ) as category
+                    FROM complaints c
+                    WHERE (c.data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                    AND (c.data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                )
+                SELECT 
+                    category,
+                    COUNT(*) as count,
+                    ROUND((COUNT(*) * 100.0 / NULLIF((SELECT COUNT(*) FROM ai_categories), 0))::numeric, 1) as percentage
+                FROM ai_categories
+                WHERE category IS NOT NULL
+                GROUP BY category
+                ORDER BY count DESC;
+            """, (last_month_start, current_date))
+            
+            category_stats = cursor.fetchall()
+            logger.debug(f"Found {len(category_stats)} categories")
+            
+            # Get total complaints in the last month
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+            """, (last_month_start, current_date))
+            
+            total_complaints = cursor.fetchone()[0]
+            logger.debug(f"Total complaints: {total_complaints}")
+            
+            # Format the data for OpenAI
+            data_context = f"""Here is the complaint data for the last month (from {last_month_start} to {current_date}):
+
+Total Complaints: {total_complaints}
+
+Complaint Categories and Counts:
+"""
+            for category, count, percentage in category_stats:
+                if category and count is not None and percentage is not None:
+                    data_context += f"- {category}: {count} complaints ({percentage}%)\n"
+            
+            # Prepare the system message for OpenAI
+            system_message = """You are a helpful assistant that answers questions about complaint data.
+            You have access to the following data about complaints in the last month.
+            Use this data to provide accurate, specific answers to questions.
+            If a question asks about the most common complaint topic, use the category with the highest count.
+            If a question asks about percentages, use the provided percentage values.
+            Be concise and clear in your responses.
+            """
+            
+            # Prepare the user message with context
+            user_message = f"""Here is the complaint data for the last month:
+
+{data_context}
+
+Question: {question}
+
+Please provide a clear, concise answer based on this data."""
+            
+            logger.debug("Calling OpenAI API...")
+            # Call OpenAI API
+            response = client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=0.7,
+                max_tokens=500
+            )
+            
+            # Get the answer from the response
+            answer = response.choices[0].message.content.strip()
+            logger.debug("Successfully generated response")
+            
+            return jsonify({'answer': answer})
+            
+        except psycopg2.Error as e:
+            logger.error(f"Database query error: {e}")
+            return jsonify({'answer': 'Sorry, there was an error querying the database. Please try again.'})
+            
+    except Exception as e:
+        logger.error(f"Error processing data query: {e}")
+        return jsonify({'answer': 'Sorry, there was an error processing your question. Please try again.'})
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+            logger.debug("Database connection closed")
+
 if __name__ == '__main__':
     # Ensure templates directory exists
     if not os.path.exists('templates'):
