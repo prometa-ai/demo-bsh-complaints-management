@@ -93,13 +93,13 @@
                 <div class="d-flex flex-wrap align-items-center">
                     <span class="me-2">Time period:</span>
                     <div class="btn-group me-3">
-                        <a href="{{ url_for('list_complaints', search=search, has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if not time_period %}active{% endif %}">All</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='24h', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '24h' %}active{% endif %}">24h</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='1w', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1w' %}active{% endif %}">1w</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='30d', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '30d' %}active{% endif %}">30d</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='3m', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '3m' %}active{% endif %}">3m</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='6m', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '6m' %}active{% endif %}">6m</a>
-                        <a href="{{ url_for('list_complaints', search=search, time_period='1y', has_notes=has_notes) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1y' %}active{% endif %}">1y</a>
+                        <a href="{{ url_for('list_complaints', search=search, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if not time_period %}active{% endif %}">All</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='24h', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '24h' %}active{% endif %}">24h</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='1w', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1w' %}active{% endif %}">1w</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='30d', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '30d' %}active{% endif %}">30d</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='3m', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '3m' %}active{% endif %}">3m</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='6m', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '6m' %}active{% endif %}">6m</a>
+                        <a href="{{ url_for('list_complaints', search=search, time_period='1y', has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}" class="btn btn-sm btn-outline-secondary {% if time_period == '1y' %}active{% endif %}">1y</a>
                     </div>
                     
                     <button class="btn btn-sm btn-outline-primary me-3" type="button" data-bs-toggle="collapse" data-bs-target="#customDateCollapse" aria-expanded="false">
@@ -118,6 +118,11 @@
                     <form action="{{ url_for('list_complaints') }}" method="GET" class="row g-2 align-items-center">
                         <input type="hidden" name="search" value="{{ search }}">
                         <input type="hidden" name="has_notes" value="{{ has_notes }}">
+                        <input type="hidden" name="country" value="{{ selected_country }}">
+                        <input type="hidden" name="status" value="{{ selected_status }}">
+                        <input type="hidden" name="warranty" value="{{ selected_warranty }}">
+                        <input type="hidden" name="ai_category" value="{{ selected_ai_category }}">
+                        <input type="hidden" name="brand" value="{{ selected_brand }}">
                         <div class="col-md-4">
                             <label for="startDate" class="form-label small">Start Date</label>
                             <input type="date" id="startDate" name="start_date" class="form-control form-control-sm" required>
@@ -325,7 +330,7 @@
             <ul class="pagination justify-content-center">
                 {% if page > 1 %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">Previous</a>
+                        <a class="page-link" href="{{ url_for('list_complaints', page=page-1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}">Previous</a>
                     </li>
                 {% endif %}
                 
@@ -334,7 +339,7 @@
                 
                 {% if start_page > 1 %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('list_complaints', page=1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">1</a>
+                        <a class="page-link" href="{{ url_for('list_complaints', page=1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}">1</a>
                     </li>
                     {% if start_page > 2 %}
                         <li class="page-item disabled">
@@ -345,7 +350,7 @@
                 
                 {% for p in range(start_page, end_page + 1) %}
                     <li class="page-item {% if p == page %}active{% endif %}">
-                        <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">{{ p }}</a>
+                        <a class="page-link" href="{{ url_for('list_complaints', page=p, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}">{{ p }}</a>
                     </li>
                 {% endfor %}
                 
@@ -356,13 +361,13 @@
                         </li>
                     {% endif %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('list_complaints', page=total_pages, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">{{ total_pages }}</a>
+                        <a class="page-link" href="{{ url_for('list_complaints', page=total_pages, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}">{{ total_pages }}</a>
                     </li>
                 {% endif %}
                 
                 {% if page < total_pages %}
                     <li class="page-item">
-                        <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category) }}">Next</a>
+                        <a class="page-link" href="{{ url_for('list_complaints', page=page+1, search=search, time_period=time_period, has_notes=has_notes, country=selected_country, status=selected_status, warranty=selected_warranty, ai_category=selected_ai_category, brand=selected_brand) }}">Next</a>
                     </li>
                 {% endif %}
             </ul>

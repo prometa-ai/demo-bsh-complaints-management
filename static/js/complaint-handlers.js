@@ -16,11 +16,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (hasNotesCheck) {
         hasNotesCheck.addEventListener('change', function() {
             const currentUrl = new URL(window.location.href);
+            
+            // Preserve page parameter if it exists but reset to 1 when filter changes
+            if (currentUrl.searchParams.has('page')) {
+                currentUrl.searchParams.set('page', '1');
+            }
+            
+            // Set or remove has_notes parameter
             if (this.checked) {
                 currentUrl.searchParams.set('has_notes', 'true');
             } else {
                 currentUrl.searchParams.delete('has_notes');
             }
+            
+            // Ensure all other parameters are maintained
+            // No need to explicitly handle: country, status, warranty, brand, ai_category, search, time_period
+            // as they're already in the URL and are not being modified
+            
             window.location.href = currentUrl.toString();
         });
     }

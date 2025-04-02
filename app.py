@@ -200,7 +200,7 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         
         # Add status filter
         if status:
-            query += " AND c.data->'complaintDetails'->>'status' = %s"
+            query += " AND c.data->'complaintDetails'->>'resolutionStatus' = %s"
             params.append(status)
         
         # Add warranty filter
