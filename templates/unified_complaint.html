@@ -66,6 +66,18 @@
                 </div>
                 <div class="card-body">
                     <p><strong>Model Number:</strong> {{ complaint[1].productInformation.modelNumber }}</p>
+                    <p><strong>Brand:</strong> 
+                        {% set model = complaint[1].productInformation.modelNumber %}
+                        {% if model.startswith('BSH') %}
+                            <span class="badge bg-danger">Bosch</span>
+                        {% elif model.startswith('SEM') %}
+                            <span class="badge bg-primary">Siemens</span>
+                        {% elif model.startswith('PRO') %}
+                            <span class="badge bg-success">Profilo</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Unknown</span>
+                        {% endif %}
+                    </p>
                     <p><strong>Serial Number:</strong> {{ complaint[1].productInformation.serialNumber }}</p>
                     <p><strong>Purchase Date:</strong> {{ complaint[1].productInformation.dateOfPurchase[:10] }}</p>
                     <p><strong>Place of Purchase:</strong> {{ complaint[1].productInformation.placeOfPurchase }}</p>

@@ -191,6 +191,7 @@
                                 <th>Date</th>
                                 <th>Customer</th>
                                 <th>Model</th>
+                                <th>Brand</th>
                                 <th>Country</th>
                                 <th>Status</th>
                                 <th>Warranty</th>
@@ -206,6 +207,18 @@
                                 <td>{{ complaint[1]['complaintDetails']['dateOfComplaint'].split('T')[0] }}</td>
                                 <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
                                 <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
+                                <td>
+                                    {% set model = complaint[1]['productInformation']['modelNumber'] %}
+                                    {% if model.startswith('BSH') %}
+                                        <span class="badge bg-danger">Bosch</span>
+                                    {% elif model.startswith('SEM') %}
+                                        <span class="badge bg-primary">Siemens</span>
+                                    {% elif model.startswith('PRO') %}
+                                        <span class="badge bg-success">Profilo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Unknown</span>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% set country = complaint[1]['customerInformation']['country'] %}
                                     {% if country == 'Norway' %}
