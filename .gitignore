@@ -1,24 +1,60 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Virtual environments
+*.so
+.Python
 env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
 venv/
 ENV/
 
-# Environment variables
-.env
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
+# Backup files
+*.bak
+*.bak2
+*.bak3
 
 # Logs
-logs/
 *.log
+
+# Local development
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+complaints_export.csv
+
+# Debug files
+debug_*.py
+check_*.py
+fix_*.py
 
 # OS generated files
 .DS_Store

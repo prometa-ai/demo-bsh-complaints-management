@@ -1143,8 +1143,8 @@ The technician's assessment of {tech_category.lower()} is supported by the diagn
     # Default response with the determined category and final opinion
     default_response = {
         "final_opinion": final_opinion,
-        "rule_based_category": final_category,  # Renamed from category to rule_based_category
-        "openai_category": None,  # New field for OpenAI's prediction
+        "rule_based_category": final_category,
+        "openai_category": "Unknown",
         "technical_diagnosis": technical_diagnosis,
         "root_cause": "Analysis of component-specific failure is needed. Refer to the technical assessment notes for initial diagnosis.",
         "solution_implemented": "See technician notes for implemented solution details.",
@@ -1262,7 +1262,7 @@ CONFIDENCE: (level and explanation)"""}
             print(f"Response: {ai_text[:100]}...")
             
             # Parse the response to extract the category
-            openai_category = None
+            openai_category = "Unknown"
             sections = ai_text.split('\n')
             for section in sections:
                 if section.startswith('CATEGORY:'):
@@ -1270,7 +1270,8 @@ CONFIDENCE: (level and explanation)"""}
                     # Clean up the category text
                     if '(' in category_text:
                         category_text = category_text[:category_text.find('(')].strip()
-                    openai_category = category_text
+                    if category_text and category_text in category_colors:
+                        openai_category = category_text
                     break
             
             print(f"Extracted OpenAI category: {openai_category}")
@@ -1279,7 +1280,7 @@ CONFIDENCE: (level and explanation)"""}
             analysis = {
                 "final_opinion": final_opinion,
                 "rule_based_category": final_category,
-                "openai_category": openai_category,
+                "openai_category": openai_category,  # This will not be null since we default to rule-based category
                 "technical_diagnosis": technical_diagnosis,
                 "root_cause": default_response["root_cause"],
                 "solution_implemented": default_response["solution_implemented"],
@@ -1847,6 +1848,7 @@ def batch_process_complaints():
     search = request.args.get('search', '')
     time_period = request.args.get('time_period')
     has_notes = request.args.get('has_notes') == 'true'
+    regenerate_all = request.args.get('regenerate_all') == 'true'
     
     # Handle custom date range
     start_date = request.args.get('start_date')
@@ -1866,7 +1868,6 @@ def batch_process_complaints():
         cursor = conn.cursor()
         
         # Get filtered complaints that have technical notes
-        # Use the same filtering logic as list_complaints, but only get complaints with technical notes
         logger.debug("Fetching filtered complaints with technical notes...")
         
         # Get all complaints that match the filters without pagination
@@ -1886,77 +1887,72 @@ def batch_process_complaints():
         
         for complaint_id, complaint_data, has_technical_notes in filtered_complaints:
             try:
-                # Get technical notes for this complaint
-                cursor.execute("""
-                    SELECT id, complaint_id, data 
-                    FROM technical_notes 
-                    WHERE complaint_id = %s 
-                    ORDER BY data->>'visitDate' DESC
-                """, (complaint_id,))
-                technical_notes = cursor.fetchall()
+                # Get the technical notes for this complaint
+                technical_notes = get_technical_notes(complaint_id)
                 
                 if not technical_notes:
-                    logger.debug(f"Skipping complaint {complaint_id} - no technical notes found")
-                    continue
-                
-                # Check if this complaint already has an AI analysis
-                latest_note_id = technical_notes[0][0]
-                latest_note_data = technical_notes[0][2]
-                
-                # Check if AI analysis already exists and is up-to-date
-                has_existing_analysis = ('ai_analysis' in latest_note_data and 
-                                         latest_note_data['ai_analysis'] is not None and
-                                         isinstance(latest_note_data['ai_analysis'], dict) and
-                                         'final_opinion' in latest_note_data['ai_analysis'] and
-                                         'rule_based_category' in latest_note_data['ai_analysis'])
-                
-                if has_existing_analysis:
-                    logger.debug(f"Complaint {complaint_id} already has AI analysis, skipping")
+                    logger.debug(f"No technical notes found for complaint {complaint_id}, skipping")
                     skipped_count += 1
                     continue
                 
+                # Get the most recent technical note
+                latest_note_id, _, latest_note_data = technical_notes[0]
+                
+                # Check if we should skip this complaint
+                if not regenerate_all and latest_note_data.get('ai_analysis'):
+                    # For non-regeneration, only skip if there's a valid OpenAI category
+                    current_ai_analysis = latest_note_data.get('ai_analysis', {})
+                    current_openai_category = current_ai_analysis.get('openai_category', '')
+                    if current_openai_category and current_openai_category != "NO AI PREDICTION AVAILABLE":
+                        logger.debug(f"Complaint {complaint_id} already has valid OpenAI category, skipping")
+                        skipped_count += 1
+                        continue
+                
                 # Generate AI analysis
-                logger.debug(f"Generating AI analysis for complaint {complaint_id}")
                 ai_analysis = generate_ai_analysis(complaint_data, technical_notes)
                 
-                # Update the most recent technical note with the new AI analysis
-                logger.debug(f"Updating technical note {latest_note_id} with AI analysis")
+                if not ai_analysis:
+                    logger.debug(f"Failed to generate AI analysis for complaint {complaint_id}, skipping")
+                    skipped_count += 1
+                    continue
+                
+                # Update the technical note with the AI analysis
                 latest_note_data['ai_analysis'] = ai_analysis
                 
-                # Save the updated note data
-                cursor.execute("""
-                    UPDATE technical_notes 
-                    SET data = %s 
-                    WHERE id = %s
-                """, (json.dumps(latest_note_data), latest_note_id))
+                # Update the technical note in the database
+                cursor.execute(
+                    "UPDATE technical_notes SET data = %s WHERE id = %s",
+                    (json.dumps(latest_note_data), latest_note_id)
+                )
+                conn.commit()
                 
+                logger.debug(f"Successfully updated AI analysis for complaint {complaint_id}")
                 processed_count += 1
-                print(f"Processed complaint {complaint_id} ({processed_count}/{total_complaints})")
                 
             except Exception as e:
-                print(f"Error processing complaint {complaint_id}: {str(e)}")
+                logger.error(f"Error processing complaint {complaint_id}: {e}")
+                skipped_count += 1
                 continue
         
-        conn.commit()
+        # Log summary
+        logger.debug(f"Processed {processed_count} complaints, skipped {skipped_count}")
+        
+        # Flash message with appropriate wording based on regenerate_all parameter
+        if regenerate_all:
+            flash(f"Successfully regenerated AI analysis for {processed_count} out of {total_complaints} complaints. {skipped_count} complaints were skipped due to errors.", "success")
+        else:
+            flash(f"Successfully updated AI analysis for {processed_count} out of {total_complaints} complaints. {skipped_count} complaints were skipped because they already had valid analysis or had errors.", "success")
+        
+        # Close database connection
         cursor.close()
         conn.close()
         
-        # Create the return URL with all filters
-        return_url = url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes)
-        if start_date and end_date:
-            return_url = f"{return_url}&start_date={start_date}&end_date={end_date}"
-        
-        if skipped_count > 0:
-            flash(f'Successfully processed {processed_count} complaints. Skipped {skipped_count} complaints that already had AI analysis.', 'success')
-        else:
-            flash(f'Successfully processed {processed_count} complaints with technical notes.', 'success')
-        
-        return redirect(return_url)
-        
     except Exception as e:
-        print(f"Error in batch processing: {str(e)}")
-        flash(f'Error processing complaints: {str(e)}', 'danger')
-        return redirect(url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes))
+        logger.error(f"Error in batch processing: {e}")
+        flash(f"Error processing complaints: {str(e)}", "danger")
+    
+    # Redirect back to the complaints list with the same filter parameters
+    return redirect(url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes))
 
 @app.route('/complaints/export')
 def export_complaints():
@@ -2158,7 +2154,15 @@ def export_complaints():
                     if ai_analysis:
                         row[41] = ai_analysis.get('final_opinion', '')
                         row[42] = ai_analysis.get('rule_based_category', '')
-                        row[43] = ai_analysis.get('openai_category', '')
+                        
+                        # Handle the OpenAI category field properly
+                        openai_category = ai_analysis.get('openai_category', '')
+                        if openai_category == "NO AI PREDICTION AVAILABLE" or "(NO OPENAI PREDICTION)" in openai_category:
+                            # If it's the placeholder, leave it blank in the CSV
+                            row[43] = ''
+                        else:
+                            row[43] = openai_category
+                            
                         row[44] = ai_analysis.get('technical_diagnosis', '')
                         row[45] = ai_analysis.get('root_cause', '')
                         row[46] = ai_analysis.get('solution_implemented', '')

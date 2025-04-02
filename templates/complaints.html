@@ -8,15 +8,21 @@
             <div class="mt-2">
                 {% if time_period and time_period.startswith('custom:') %}
                     {% set dates = time_period.split(':') %}
-                    <a href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes, start_date=dates[1], end_date=dates[2]) }}" class="btn btn-secondary">
+                    <a id="updateAiButton" href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes, start_date=dates[1], end_date=dates[2]) }}" class="btn btn-secondary">
                         <i class="fas fa-sync"></i> Update AI Analysis
+                    </a>
+                    <a id="regenerateAiButton" href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes, start_date=dates[1], end_date=dates[2], regenerate_all=true) }}" class="btn btn-warning ms-2">
+                        <i class="fas fa-sync-alt"></i> Fix AI Analysis
                     </a>
                     <a href="{{ url_for('export_complaints', search=search, time_period=time_period, has_notes=has_notes, start_date=dates[1], end_date=dates[2]) }}" class="btn btn-success ms-2">
                         <i class="fas fa-file-csv"></i> Export to CSV
                     </a>
                 {% else %}
-                    <a href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes) }}" class="btn btn-secondary">
+                    <a id="updateAiButton" href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes) }}" class="btn btn-secondary">
                         <i class="fas fa-sync"></i> Update AI Analysis
+                    </a>
+                    <a id="regenerateAiButton" href="{{ url_for('batch_process_complaints', search=search, time_period=time_period, has_notes=has_notes, regenerate_all=true) }}" class="btn btn-warning ms-2">
+                        <i class="fas fa-sync-alt"></i> Fix AI Analysis
                     </a>
                     <a href="{{ url_for('export_complaints', search=search, time_period=time_period, has_notes=has_notes) }}" class="btn btn-success ms-2">
                         <i class="fas fa-file-csv"></i> Export to CSV

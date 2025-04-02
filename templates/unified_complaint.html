@@ -369,7 +369,7 @@
                                 </div>
                             </div>
                             
-                            {% if ai_analysis.openai_category %}
+                            {% if ai_analysis.openai_category and ai_analysis.openai_category != "NO AI PREDICTION AVAILABLE" and "(NO OPENAI PREDICTION)" not in ai_analysis.openai_category %}
                             <div class="mt-2">
                                 <strong>AI-Predicted Category:</strong>
                                 <div class="mt-1">
