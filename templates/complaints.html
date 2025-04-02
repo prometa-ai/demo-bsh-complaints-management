@@ -200,9 +200,27 @@
                                         {% set ai_analysis = complaint[2].get('ai_analysis') %}
                                         {% if ai_analysis.get('openai_category') and ai_analysis.get('openai_category') != 'NO AI PREDICTION AVAILABLE' %}
                                             {% set category = ai_analysis.get('openai_category') %}
-                                            <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(category, '#808080') }}; color: white; font-size: 0.875rem; padding: 0.35rem 0.65rem;">
-                                                <i class="fas fa-robot me-1"></i>{{ category }}
-                                            </span>
+                                            {% if category == 'Product Quality' %}
+                                                <span class="badge bg-danger">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% elif category == 'Customer Service' %}
+                                                <span class="badge bg-warning">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% elif category == 'Installation' %}
+                                                <span class="badge bg-info">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% elif category == 'Warranty' %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-primary">
+                                                    <i class="fas fa-robot me-1"></i>{{ category }}
+                                                </span>
+                                            {% endif %}
                                         {% else %}
                                             <span class="badge bg-warning">
                                                 <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
