@@ -133,80 +133,89 @@ def connect_to_db():
         print(f"Database connection error: {e}")
         raise
 
-def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None):
+def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None):
     """Get all complaints with pagination and filtering."""
     try:
         conn = connect_to_db()
         cursor = conn.cursor()
         
-        # Base query
+        # Base query with CTE for latest technical notes
         query = """
-            WITH latest_tech_notes AS (
-                SELECT DISTINCT ON (complaint_id)
-                    complaint_id,
-                    data
-                FROM technical_notes
-                ORDER BY complaint_id, id DESC
-            )
-            SELECT c.id, c.data, tn.data
-            FROM complaints c
-            LEFT JOIN latest_tech_notes tn ON c.id = tn.complaint_id
-            WHERE 1=1
+        WITH latest_notes AS (
+            SELECT 
+                complaint_id,
+                data->'ai_analysis'->>'openai_category' as ai_category
+            FROM technical_notes
+            WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
+            AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+            ORDER BY id DESC
+        )
+        SELECT 
+            c.id,
+            c.data,
+            tn.data as technical_notes
+        FROM complaints c
+        LEFT JOIN latest_notes ln ON c.id = ln.complaint_id
+        LEFT JOIN technical_notes tn ON c.id = tn.complaint_id
+        WHERE 1=1
         """
         
         params = []
         
-        # Add country filter if provided
-        if country:
-            query += " AND c.data->'customerInformation'->>'country' = %s"
-            params.append(country)
-            
-        # Add status filter if provided
-        if status:
-            query += " AND c.data->'complaintDetails'->>'resolutionStatus' = %s"
-            params.append(status)
-            
-        # Add warranty filter if provided
-        if warranty:
-            query += " AND c.data->'warrantyInformation'->>'warrantyStatus' = %s"
-            params.append(warranty)
+        # Add search filter
+        if search:
+            search_pattern = f"%{search}%"
+            query += """
+            AND (
+                c.data->>'customerInformation'->>'fullName' ILIKE %s
+                OR c.data->>'productInformation'->>'modelNumber' ILIKE %s
+                OR c.data->>'complaintDetails'->>'detailedDescription' ILIKE %s
+            )
+            """
+            params.extend([search_pattern, search_pattern, search_pattern])
         
         # Add time period filter
         if time_period:
             if time_period == '24h':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 day'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '24 hours'"
             elif time_period == '1w':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '7 days'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 week'"
             elif time_period == '30d':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '30 days'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '30 days'"
             elif time_period == '3m':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '3 months'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '3 months'"
             elif time_period == '6m':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '6 months'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '6 months'"
             elif time_period == '1y':
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 year'"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 year'"
             elif time_period.startswith('custom:'):
                 start_date, end_date = time_period.split(':')[1:]
-                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s::timestamp AND %s::timestamp"
+                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s"
                 params.extend([start_date, end_date])
         
-        # Add technical notes filter
-        if has_notes:
-            query += " AND tn.data IS NOT NULL"
+        # Add country filter
+        if country:
+            query += " AND c.data->>'customerInformation'->>'country' = %s"
+            params.append(country)
         
-        # Add search filter if provided
-        if search:
-            search = search.strip()
-            if search:
-                query += """
-                    AND (
-                        c.data->'customerInformation'->>'fullName' ILIKE %s
-                        OR c.data->'productInformation'->>'modelNumber' ILIKE %s
-                        OR c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
-                    )
-                """
-                search_pattern = f"%{search}%"
-                params.extend([search_pattern, search_pattern, search_pattern])
+        # Add status filter
+        if status:
+            query += " AND c.data->>'complaintDetails'->>'status' = %s"
+            params.append(status)
+        
+        # Add warranty filter
+        if warranty:
+            query += " AND c.data->>'warrantyInformation'->>'warrantyStatus' = %s"
+            params.append(warranty)
+        
+        # Add AI Category filter
+        if ai_category:
+            query += " AND ln.ai_category = %s AND ln.ai_category NOT LIKE '%(NO OPENAI PREDICTION)%'"
+            params.append(ai_category)
+        
+        # Add has_notes filter
+        if has_notes:
+            query += " AND tn.id IS NOT NULL"
         
         # Get total count
         count_query = f"""
@@ -1292,16 +1301,15 @@ def index():
 
 @app.route('/complaints')
 def list_complaints():
-    """List complaints with filtering and pagination."""
     try:
-        logger.debug("Accessed complaints listing route")
-        page = request.args.get('page', 1, type=int)
+        page = int(request.args.get('page', 1))
         search = request.args.get('search', '')
-        time_period = request.args.get('time_period')
+        time_period = request.args.get('time_period', '')
         has_notes = request.args.get('has_notes') == 'true'
         country = request.args.get('country', '')
         status = request.args.get('status', '')
-        warranty = request.args.get('warranty', '')  # Add warranty filter parameter
+        warranty = request.args.get('warranty', '')
+        ai_category = request.args.get('ai_category', '')
         
         # Handle custom date range
         if not time_period and request.args.get('start_date') and request.args.get('end_date'):
@@ -1317,6 +1325,18 @@ def list_complaints():
             ORDER BY country
         """)
         countries = [row[0] for row in cursor.fetchall()]
+        
+        # Get unique AI Categories for the dropdown
+        cursor.execute("""
+            SELECT DISTINCT data->'ai_analysis'->>'openai_category' as ai_category
+            FROM technical_notes
+            WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
+            AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+            AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
+            ORDER BY ai_category
+        """)
+        ai_categories = [row[0] for row in cursor.fetchall()]
+        
         cursor.close()
         conn.close()
         
@@ -1327,7 +1347,8 @@ def list_complaints():
             has_notes=has_notes,
             country=country,
             status=status,
-            warranty=warranty  # Pass warranty filter to get_all_complaints
+            warranty=warranty,
+            ai_category=ai_category
         )
         
         total_pages = (total_count + 9) // 10  # 10 items per page
@@ -1341,9 +1362,11 @@ def list_complaints():
                              has_notes=has_notes,
                              total_count=total_count,
                              countries=countries,
+                             ai_categories=ai_categories,
                              selected_country=country,
                              selected_status=status,
-                             selected_warranty=warranty)  # Pass selected warranty to template
+                             selected_warranty=warranty,
+                             selected_ai_category=ai_category)
                              
     except Exception as e:
         logger.error(f"Error in list_complaints: {e}")
