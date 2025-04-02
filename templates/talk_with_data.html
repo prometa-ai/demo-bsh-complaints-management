@@ -34,11 +34,26 @@
                 </div>
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item">What is the most common complaint topic in the last month?</li>
-                        <li class="list-group-item">What is the resolution rate of complaints in the last 3 months?</li>
-                        <li class="list-group-item">Which product model has the most complaints?</li>
-                        <li class="list-group-item">What is the average resolution time for complaints?</li>
-                        <li class="list-group-item">Show me the trend of complaints over time.</li>
+                        <li class="list-group-item example-question">
+                            <i class="fas fa-question-circle text-primary me-2"></i>
+                            What is the most common complaint topic in the last month?
+                        </li>
+                        <li class="list-group-item example-question">
+                            <i class="fas fa-question-circle text-primary me-2"></i>
+                            What is the resolution rate of complaints in the last 3 months?
+                        </li>
+                        <li class="list-group-item example-question">
+                            <i class="fas fa-question-circle text-primary me-2"></i>
+                            Which product model has the most complaints?
+                        </li>
+                        <li class="list-group-item example-question">
+                            <i class="fas fa-question-circle text-primary me-2"></i>
+                            What is the average resolution time for complaints?
+                        </li>
+                        <li class="list-group-item example-question">
+                            <i class="fas fa-question-circle text-primary me-2"></i>
+                            Show me the trend of complaints over time.
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -74,6 +89,15 @@
     color: #6c757d;
     margin-top: 5px;
 }
+
+.example-question {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.example-question:hover {
+    background-color: #e9ecef;
+}
 </style>
 
 <script>
@@ -81,6 +105,22 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatForm = document.getElementById('chat-form');
     const userInput = document.getElementById('user-input');
     const chatMessages = document.getElementById('chat-messages');
+    const exampleQuestions = document.querySelectorAll('.example-question');
+    
+    // Add click event to example questions
+    exampleQuestions.forEach(question => {
+        question.addEventListener('click', function() {
+            // Get the text without the icon
+            const questionText = this.textContent.trim();
+            userInput.value = questionText;
+            userInput.focus();
+            
+            // Add a small delay before submitting the form to show the user what was copied
+            setTimeout(() => {
+                chatForm.dispatchEvent(new Event('submit'));
+            }, 300);
+        });
+    });
     
     function addMessage(content, isUser = false) {
         const messageDiv = document.createElement('div');
