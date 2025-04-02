@@ -1295,9 +1295,8 @@ CONFIDENCE: (level and explanation)"""}
 # Routes
 @app.route('/')
 def index():
-    """Redirect root to statistics page."""
-    logger.debug("Accessed index route, redirecting to statistics")
-    return redirect(url_for('statistics'))
+    """Home page - redirects to complaints page."""
+    return redirect(url_for('list_complaints'))
 
 @app.route('/complaints')
 def list_complaints():
