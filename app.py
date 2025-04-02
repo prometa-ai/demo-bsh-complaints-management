@@ -133,7 +133,7 @@ def connect_to_db():
         print(f"Database connection error: {e}")
         raise
 
-def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None):
+def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None, brand=None):
     """Get all complaints with pagination and filtering."""
     try:
         conn = connect_to_db()
@@ -167,9 +167,9 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             search_pattern = f"%{search}%"
             query += """
             AND (
-                c.data->>'customerInformation'->>'fullName' ILIKE %s
-                OR c.data->>'productInformation'->>'modelNumber' ILIKE %s
-                OR c.data->>'complaintDetails'->>'detailedDescription' ILIKE %s
+                c.data->'customerInformation'->>'fullName' ILIKE %s
+                OR c.data->'productInformation'->>'modelNumber' ILIKE %s
+                OR c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
             )
             """
             params.extend([search_pattern, search_pattern, search_pattern])
@@ -177,37 +177,42 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         # Add time period filter
         if time_period:
             if time_period == '24h':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '24 hours'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '24 hours'"
             elif time_period == '1w':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 week'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 week'"
             elif time_period == '30d':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '30 days'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '30 days'"
             elif time_period == '3m':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '3 months'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '3 months'"
             elif time_period == '6m':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '6 months'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '6 months'"
             elif time_period == '1y':
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 year'"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 year'"
             elif time_period.startswith('custom:'):
                 start_date, end_date = time_period.split(':')[1:]
-                query += " AND c.data->>'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s"
+                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s"
                 params.extend([start_date, end_date])
         
         # Add country filter
         if country:
-            query += " AND c.data->>'customerInformation'->>'country' = %s"
+            query += " AND c.data->'customerInformation'->>'country' = %s"
             params.append(country)
         
         # Add status filter
         if status:
-            query += " AND c.data->>'complaintDetails'->>'status' = %s"
+            query += " AND c.data->'complaintDetails'->>'status' = %s"
             params.append(status)
         
         # Add warranty filter
         if warranty:
-            query += " AND c.data->>'warrantyInformation'->>'warrantyStatus' = %s"
+            query += " AND c.data->'warrantyInformation'->>'warrantyStatus' = %s"
             params.append(warranty)
         
+        # Add brand filter
+        if brand:
+            query += " AND c.data->'productInformation'->>'brand' = %s"
+            params.append(brand)
+            
         # Add AI Category filter
         if ai_category:
             query += " AND ln.ai_category = %s AND ln.ai_category NOT LIKE '%(NO OPENAI PREDICTION)%'"
@@ -1309,6 +1314,11 @@ def list_complaints():
         status = request.args.get('status', '')
         warranty = request.args.get('warranty', '')
         ai_category = request.args.get('ai_category', '')
+        brand = request.args.get('brand', '')
+        
+        # Check if this is a reset (no filters) and page=1
+        is_reset = (not search and not time_period and not has_notes and not country and 
+                   not status and not warranty and not ai_category and not brand and page == 1)
         
         # Handle custom date range
         if not time_period and request.args.get('start_date') and request.args.get('end_date'):
@@ -1324,6 +1334,15 @@ def list_complaints():
             ORDER BY country
         """)
         countries = [row[0] for row in cursor.fetchall()]
+        
+        # Get unique brands for the dropdown
+        cursor.execute("""
+            SELECT DISTINCT data->'productInformation'->>'brand' as brand
+            FROM complaints
+            WHERE data->'productInformation'->>'brand' IS NOT NULL
+            ORDER BY brand
+        """)
+        brands = [row[0] for row in cursor.fetchall()]
         
         # Get unique AI Categories for the dropdown
         cursor.execute("""
@@ -1348,11 +1367,15 @@ def list_complaints():
             status=status,
             warranty=warranty,
             ai_category=ai_category,
+            brand=brand,
             items_per_page=100  # Increase to show 100 items per page
         )
         
         total_pages = (total_count + 99) // 100  # 100 items per page
         
+        if is_reset and request.args.get('reset') == 'true':
+            flash('All filters have been reset.', 'info')
+            
         return render_template('complaints.html',
                              complaints=complaints,
                              page=page,
@@ -1362,11 +1385,13 @@ def list_complaints():
                              has_notes=has_notes,
                              total_count=total_count,
                              countries=countries,
+                             brands=brands,
                              ai_categories=ai_categories,
                              selected_country=country,
                              selected_status=status,
                              selected_warranty=warranty,
-                             selected_ai_category=ai_category)
+                             selected_ai_category=ai_category,
+                             selected_brand=brand)
                              
     except Exception as e:
         logger.error(f"Error in list_complaints: {e}")
@@ -2376,4 +2401,5 @@ if __name__ == '__main__':
     setup_technical_notes_table()
     
     # Disable reloader and use threaded=True to avoid hanging issues
+    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False, threaded=True) 
     app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False, threaded=True) 

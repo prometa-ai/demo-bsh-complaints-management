@@ -40,11 +40,19 @@
                     <div class="col-md-3">
                         <input type="text" name="search" class="form-control" placeholder="Search complaints or customers..." value="{{ search }}">
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <select name="country" class="form-control">
                             <option value="">All Countries</option>
                             {% for country in countries %}
                                 <option value="{{ country }}" {% if country == selected_country %}selected{% endif %}>{{ country }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <select name="brand" class="form-control">
+                            <option value="">All Brands</option>
+                            {% for brand in brands %}
+                                <option value="{{ brand }}" {% if brand == selected_brand %}selected{% endif %}>{{ brand }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -57,14 +65,14 @@
                             <option value="Not Resolved" {% if selected_status == 'Not Resolved' %}selected{% endif %}>Not Resolved</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <select name="warranty" class="form-control">
                             <option value="">All Warranty</option>
                             <option value="Active" {% if selected_warranty == 'Active' %}selected{% endif %}>Active</option>
                             <option value="Expired" {% if selected_warranty == 'Expired' %}selected{% endif %}>Expired</option>
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <select name="ai_category" class="form-control">
                             <option value="">All AI Categories</option>
                             {% for category in ai_categories %}
@@ -72,8 +80,11 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <button type="submit" class="btn btn-primary w-100">Search</button>
+                    </div>
+                    <div class="col-md-1">
+                        <a href="{{ url_for('list_complaints', reset='true') }}" class="btn btn-danger w-100"><i class="fas fa-times"></i> Reset</a>
                     </div>
                 </div>
             </form>
@@ -146,6 +157,9 @@
                         {% if selected_country %}
                             from {{ selected_country }}
                         {% endif %}
+                        {% if selected_brand %}
+                            with brand "{{ selected_brand }}"
+                        {% endif %}
                         {% if selected_status %}
                             with status "{{ selected_status }}"
                         {% endif %}
@@ -209,14 +223,13 @@
                                 <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
                                 <td>
                                     {% set model = complaint[1]['productInformation']['modelNumber'] %}
-                                    {% if model.startswith('BSH-R') and model[-1]|int is divisible by(3) %}
+                                    {% set complaint_id = complaint[0]|int %}
+                                    {% if complaint_id % 3 == 0 %}
                                         <span class="badge bg-danger">Bosch</span>
-                                    {% elif model.startswith('BSH-R') and model[-1]|int is divisible by(2) %}
+                                    {% elif complaint_id % 3 == 1 %}
                                         <span class="badge bg-primary">Siemens</span>
-                                    {% elif model.startswith('BSH-R') %}
-                                        <span class="badge bg-success">Profilo</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">Unknown</span>
+                                        <span class="badge bg-success">Profilo</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -389,4 +402,4 @@
         }
     });
 </script>
-{% endblock %} 
+{% endblock %}
