@@ -141,14 +141,16 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         
         # Base query
         query = """
-            WITH complaint_notes AS (
-                SELECT complaint_id, COUNT(*) > 0 as has_notes
+            WITH latest_tech_notes AS (
+                SELECT DISTINCT ON (complaint_id)
+                    complaint_id,
+                    data
                 FROM technical_notes
-                GROUP BY complaint_id
+                ORDER BY complaint_id, id DESC
             )
-            SELECT c.id, c.data, cn.has_notes
+            SELECT c.id, c.data, tn.data
             FROM complaints c
-            LEFT JOIN complaint_notes cn ON c.id = cn.complaint_id
+            LEFT JOIN latest_tech_notes tn ON c.id = tn.complaint_id
             WHERE 1=1
         """
         
@@ -212,43 +214,59 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         
         # Add technical notes filter
         if has_notes:
-            query += " AND EXISTS(SELECT 1 FROM technical_notes WHERE complaint_id = c.id)"
+            query += " AND tn.data IS NOT NULL"
         
-        # Add search filter
+        # Add search filter if provided
         if search:
-            search_term = f"%{search}%"
-            query += """
-                AND (
-                    c.data->'customerInformation'->>'fullName' LIKE %s OR
-                    c.data->'productInformation'->>'modelNumber' LIKE %s OR
-                    c.data->'complaintDetails'->>'natureOfProblem' LIKE %s
-                )
-            """
+            search = search.strip()
+            if search:
+                query += """
+                    AND (
+                        c.data->'customerInformation'->>'fullName' ILIKE %s
+                        OR c.data->'productInformation'->>'modelNumber' ILIKE %s
+                        OR c.data->'complaintDetails'->>'detailedDescription' ILIKE %s
+                    )
+                """
+                search_pattern = f"%{search}%"
+                params = [search_pattern, search_pattern, search_pattern]
+            else:
+                params = []
+        else:
+            params = []
         
-        # Get total count with proper subquery alias
-        count_query = f"SELECT COUNT(*) FROM ({query}) AS filtered_complaints"
+        # Get total count
+        count_query = f"""
+            SELECT COUNT(*)
+            FROM ({query}) AS filtered_complaints
+        """
+        
         if search:
-            cursor.execute(count_query, (search_term, search_term, search_term))
+            cursor.execute(count_query, params)
         else:
             cursor.execute(count_query)
+            
         total_count = cursor.fetchone()[0]
         
-        # Add pagination with proper PostgreSQL syntax
-        query += " ORDER BY (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp DESC LIMIT %s OFFSET %s"
+        # Add pagination
+        query += " ORDER BY (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp DESC"
+        query += " LIMIT %s OFFSET %s"
         
-        # Execute final query
+        # Add pagination parameters
         if search:
-            cursor.execute(query, (search_term, search_term, search_term, items_per_page, (page - 1) * items_per_page))
+            params.extend([items_per_page, (page - 1) * items_per_page])
+            cursor.execute(query, params)
         else:
-            cursor.execute(query, (items_per_page, (page - 1) * items_per_page))
+            cursor.execute(query, [items_per_page, (page - 1) * items_per_page])
         
         complaints = cursor.fetchall()
+        
+        cursor.close()
         conn.close()
         
         return complaints, total_count
-
+        
     except Exception as e:
-        print(f"Error getting all complaints: {e}")
+        logger.error(f"Error in get_all_complaints: {e}")
         return [], 0
 
 def get_complaint_by_id(complaint_id):

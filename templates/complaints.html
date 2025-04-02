@@ -135,6 +135,7 @@
                             <th>Status</th>
                             <th>Warranty</th>
                             <th>Technical Notes</th>
+                            <th>AI Category</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -190,6 +191,31 @@
                                 {% else %}
                                     <span class="badge bg-secondary">
                                         <i class="fas fa-times me-1"></i>No Notes
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if complaint[2] %}
+                                    {% if complaint[2].get('ai_analysis') %}
+                                        {% set ai_analysis = complaint[2].get('ai_analysis') %}
+                                        {% if ai_analysis.get('openai_category') and ai_analysis.get('openai_category') != 'NO AI PREDICTION AVAILABLE' %}
+                                            {% set category = ai_analysis.get('openai_category') %}
+                                            <span class="badge" style="background-color: {{ config['CATEGORY_COLORS'].get(category, '#808080') }}; color: white; font-size: 0.875rem; padding: 0.35rem 0.65rem;">
+                                                <i class="fas fa-robot me-1"></i>{{ category }}
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-warning">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>Pending Analysis
+                                        </span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-minus me-1"></i>No Analysis
                                     </span>
                                 {% endif %}
                             </td>
