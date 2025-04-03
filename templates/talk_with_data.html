@@ -69,6 +69,21 @@
     </div>
 </div>
 
+<!-- Add a modal for displaying charts -->
+<div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chartModalLabel">Complaint Trend Analysis</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="trendChartContainer" style="height: 500px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 .chat-messages {
     background-color: #f8f9fa;
@@ -106,7 +121,26 @@
 .example-question:hover {
     background-color: #e9ecef;
 }
+
+.chart-button {
+    display: inline-block;
+    cursor: pointer;
+    color: #007bff;
+    text-decoration: underline;
+    margin-top: 10px;
+}
+
+.chart-container {
+    margin-top: 15px;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: white;
+}
 </style>
+
+<!-- Add Plotly.js for interactive charts -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -114,6 +148,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const userInput = document.getElementById('user-input');
     const chatMessages = document.getElementById('chat-messages');
     const exampleQuestions = document.querySelectorAll('.example-question');
+    const chartModal = new bootstrap.Modal(document.getElementById('chartModal'));
     
     // Add click event to example questions
     exampleQuestions.forEach(question => {
@@ -130,19 +165,50 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    function addMessage(content, isUser = false) {
+    function addMessage(content, isUser = false, isTrendQuery = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
         
         const time = new Date().toLocaleTimeString();
-        messageDiv.innerHTML = `
-            <div>${content}</div>
-            <div class="message-time">${time}</div>
-        `;
+        let messageContent = `<div>${content}</div>`;
+        
+        // Add a button to show chart if this is a trend query
+        if (!isUser && isTrendQuery) {
+            messageContent += `
+                <div class="chart-button" onclick="showTrendChart()">
+                    <i class="fas fa-chart-line me-1"></i> View Interactive Chart
+                </div>
+            `;
+        }
+        
+        messageContent += `<div class="message-time">${time}</div>`;
+        messageDiv.innerHTML = messageContent;
         
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
+    
+    // Function to load and display the trend chart
+    window.showTrendChart = function() {
+        fetch('/talk_with_data/monthly_trend')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error loading chart data:', data.error);
+                    return;
+                }
+                
+                // Parse the chart JSON and render it
+                const chartJson = JSON.parse(data.chart);
+                Plotly.newPlot('trendChartContainer', chartJson.data, chartJson.layout);
+                
+                // Show the modal with the chart
+                chartModal.show();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    };
     
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -164,7 +230,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             const data = await response.json();
-            addMessage(data.answer);
+            addMessage(data.answer, false, data.is_trend_query);
+            
         } catch (error) {
             addMessage('Sorry, there was an error processing your question. Please try again.');
             console.error('Error:', error);

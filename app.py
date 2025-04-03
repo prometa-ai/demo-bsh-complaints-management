@@ -2452,6 +2452,68 @@ def process_data_query():
             brand_resolution_stats = cursor.fetchall()
             logger.debug(f"Found resolution stats for {len(brand_resolution_stats)} brands")
             
+            # Calculate average resolution time for resolved complaints
+            cursor.execute("""
+                SELECT 
+                    AVG(
+                        EXTRACT(EPOCH FROM 
+                            (data->'complaintDetails'->>'resolutionDate')::timestamp - 
+                            (data->'complaintDetails'->>'dateOfComplaint')::timestamp
+                        ) / 86400
+                    ) as avg_days_to_resolve,
+                    MIN(
+                        EXTRACT(EPOCH FROM 
+                            (data->'complaintDetails'->>'resolutionDate')::timestamp - 
+                            (data->'complaintDetails'->>'dateOfComplaint')::timestamp
+                        ) / 86400
+                    ) as min_days_to_resolve,
+                    MAX(
+                        EXTRACT(EPOCH FROM 
+                            (data->'complaintDetails'->>'resolutionDate')::timestamp - 
+                            (data->'complaintDetails'->>'dateOfComplaint')::timestamp
+                        ) / 86400
+                    ) as max_days_to_resolve,
+                    COUNT(*) as resolved_complaint_count
+                FROM complaints
+                WHERE data->'complaintDetails'->>'resolutionStatus' = 'Resolved'
+                AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp IS NOT NULL
+                AND (data->'complaintDetails'->>'resolutionDate')::timestamp IS NOT NULL
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s;
+            """, (last_three_months_start, current_date))
+            
+            resolution_time_stats = cursor.fetchone()
+            avg_resolution_days = resolution_time_stats[0] if resolution_time_stats and resolution_time_stats[0] is not None else None
+            min_resolution_days = resolution_time_stats[1] if resolution_time_stats and resolution_time_stats[1] is not None else None
+            max_resolution_days = resolution_time_stats[2] if resolution_time_stats and resolution_time_stats[2] is not None else None
+            resolved_count = resolution_time_stats[3] if resolution_time_stats and resolution_time_stats[3] is not None else 0
+            
+            logger.debug(f"Average resolution time: {avg_resolution_days} days")
+            
+            # Calculate average resolution time by brand
+            cursor.execute("""
+                SELECT 
+                    COALESCE(data->'productInformation'->>'brand', 'Unknown') as brand,
+                    ROUND(AVG(
+                        EXTRACT(EPOCH FROM 
+                            (data->'complaintDetails'->>'resolutionDate')::timestamp - 
+                            (data->'complaintDetails'->>'dateOfComplaint')::timestamp
+                        ) / 86400
+                    )::numeric, 1) as avg_days_to_resolve,
+                    COUNT(*) as resolved_complaints
+                FROM complaints
+                WHERE data->'complaintDetails'->>'resolutionStatus' = 'Resolved'
+                AND (data->'complaintDetails'->>'dateOfComplaint')::timestamp IS NOT NULL
+                AND (data->'complaintDetails'->>'resolutionDate')::timestamp IS NOT NULL
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                GROUP BY brand
+                ORDER BY resolved_complaints DESC;
+            """, (last_three_months_start, current_date))
+            
+            brand_resolution_time_stats = cursor.fetchall()
+            logger.debug(f"Found resolution time stats for {len(brand_resolution_time_stats)} brands")
+            
             # Get resolution status data for the last 3 months
             cursor.execute("""
                 SELECT 
@@ -2543,6 +2605,24 @@ Brand Resolution Rates (Last 3 Months):
                     data_context += f"- {brand}: {resolved} resolved out of {total} complaints ({rate}% resolution rate)\n"
             
             data_context += """
+Resolution Time Statistics (Last 3 Months):
+"""
+            if avg_resolution_days is not None:
+                data_context += f"- Average resolution time: {round(avg_resolution_days, 1)} days\n"
+                data_context += f"- Minimum resolution time: {round(min_resolution_days, 1)} days\n"
+                data_context += f"- Maximum resolution time: {round(max_resolution_days, 1)} days\n"
+                data_context += f"- Number of resolved complaints analyzed: {resolved_count}\n"
+            else:
+                data_context += "- No resolution time data available for the selected period.\n"
+            
+            data_context += """
+Resolution Time by Brand (Last 3 Months):
+"""
+            for brand, avg_days, count in brand_resolution_time_stats:
+                if brand and avg_days is not None and count is not None:
+                    data_context += f"- {brand}: {avg_days} days (based on {count} resolved complaints)\n"
+            
+            data_context += """
 Resolution Status:
 """
             for status, count, percentage in resolution_stats:
@@ -2573,6 +2653,8 @@ Monthly Resolution Rates:
             
             For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
             For brand-specific resolution rates, refer to the "Brand Resolution Rates" section.
+            For resolution time questions, use the "Resolution Time Statistics" section.
+            For brand-specific resolution times, use the "Resolution Time by Brand" section.
             For category questions, use the AI category information.
             For product model questions, refer to the "Top Product Models by Complaint Count" section.
             For brand questions, refer to the "Top Brands by Complaint Count" section.
@@ -2610,7 +2692,19 @@ Please provide a clear, concise answer based on this data."""
             answer = response.choices[0].message.content.strip()
             logger.debug("Successfully generated response")
             
-            return jsonify({'answer': answer})
+            # Check if this is a trend analysis request
+            is_trend_query = False
+            trend_keywords = ["trend", "over time", "pattern", "progression", "historical", "changes", "evolution"]
+            question_lower = question.lower()
+            
+            if any(keyword in question_lower for keyword in trend_keywords):
+                is_trend_query = True
+                logger.debug("Detected trend analysis request")
+            
+            return jsonify({
+                'answer': answer,
+                'is_trend_query': is_trend_query
+            })
             
         except psycopg2.Error as e:
             logger.error(f"Database query error: {e}")
@@ -2626,6 +2720,117 @@ Please provide a clear, concise answer based on this data."""
         if conn:
             conn.close()
             logger.debug("Database connection closed")
+
+@app.route('/talk_with_data/monthly_trend', methods=['GET'])
+@login_required
+def get_complaints_monthly_trend():
+    """Get the monthly trend of complaints for interactive visualization."""
+    conn = None
+    cursor = None
+    try:
+        # Connect to the database
+        conn = connect_to_db()
+        if not conn:
+            return jsonify({'error': 'Failed to connect to database'}), 500
+            
+        cursor = conn.cursor()
+        
+        # Get data for the last 6 months
+        six_months_ago = (datetime.now() - timedelta(days=180)).date()
+        current_date = datetime.now().date()
+        
+        # Get monthly trend data
+        cursor.execute("""
+            WITH RECURSIVE months AS (
+                SELECT DATE_TRUNC('month', %s::timestamp) as month
+                UNION ALL
+                SELECT month + INTERVAL '1 month'
+                FROM months
+                WHERE month < DATE_TRUNC('month', %s::timestamp)
+            )
+            SELECT 
+                to_char(m.month, 'Month YYYY') as month_label,
+                m.month as month_date,
+                COUNT(c.id) as count
+            FROM months m
+            LEFT JOIN complaints c ON 
+                DATE_TRUNC('month', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = m.month
+            GROUP BY m.month, month_label
+            ORDER BY m.month ASC;
+        """, (six_months_ago, current_date))
+        
+        results = cursor.fetchall()
+        
+        # Format the data for the chart
+        months = []
+        counts = []
+        
+        for month_label, month_date, count in results:
+            months.append(month_label.strip())  # Remove extra spaces
+            counts.append(count)
+        
+        # Create a Plotly figure
+        import plotly.graph_objects as go
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=months,
+            y=counts,
+            mode='lines+markers',
+            name='Complaints',
+            line=dict(color='#007bff', width=3),
+            marker=dict(size=10, color='#007bff')
+        ))
+        
+        # Add a trend line
+        import numpy as np
+        z = np.polyfit(range(len(months)), counts, 1)
+        p = np.poly1d(z)
+        fig.add_trace(go.Scatter(
+            x=months,
+            y=p(range(len(months))),
+            mode='lines',
+            name='Trend',
+            line=dict(color='#dc3545', width=2, dash='dash')
+        ))
+        
+        fig.update_layout(
+            title='Monthly Complaints Trend',
+            xaxis_title='Month',
+            yaxis_title='Number of Complaints',
+            showlegend=True,
+            height=500,
+            width=800,
+            margin=dict(t=50, b=50, l=50, r=50),
+            yaxis=dict(rangemode='nonnegative'),
+            xaxis=dict(tickangle=-45),
+            hovermode='x unified'
+        )
+        
+        # Add a hover template with more information
+        fig.update_traces(
+            hovertemplate='%{y} complaints in %{x}<extra></extra>',
+            selector=dict(name='Complaints')
+        )
+        
+        import plotly
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        
+        return jsonify({
+            'chart': chart_json,
+            'months': months,
+            'counts': counts
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating trend chart: {e}")
+        return jsonify({'error': 'Failed to generate trend data'}), 500
+        
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 if __name__ == '__main__':
     # Ensure templates directory exists
