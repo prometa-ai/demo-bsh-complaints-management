@@ -2700,6 +2700,84 @@ Please provide a clear, concise answer based on this data."""
             if any(keyword in question_lower for keyword in trend_keywords):
                 is_trend_query = True
                 logger.debug("Detected trend analysis request")
+                
+                # Enhance data with monthly trends data for better responses
+                try:
+                    # Get data for the last 12 months for trend analysis
+                    twelve_months_ago = current_date - timedelta(days=365)
+                    
+                    cursor.execute("""
+                        WITH RECURSIVE months AS (
+                            SELECT DATE_TRUNC('month', %s::timestamp) as month
+                            UNION ALL
+                            SELECT month + INTERVAL '1 month'
+                            FROM months
+                            WHERE month < DATE_TRUNC('month', %s::timestamp)
+                        )
+                        SELECT 
+                            to_char(m.month, 'Month YYYY') as month_label,
+                            COUNT(c.id) as count
+                        FROM months m
+                        LEFT JOIN complaints c ON 
+                            DATE_TRUNC('month', (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp) = m.month
+                        GROUP BY m.month, month_label
+                        ORDER BY m.month ASC;
+                    """, (twelve_months_ago, current_date))
+                    
+                    monthly_trend_results = cursor.fetchall()
+                    
+                    if monthly_trend_results:
+                        data_context += "\nMonthly Complaint Counts:\n"
+                        for month_label, count in monthly_trend_results:
+                            data_context += f"- {month_label.strip()}: {count} complaints\n"
+                        
+                        # Create a trend-specific system message
+                        trend_system_message = """You are a helpful assistant that analyzes time-series data about refrigerator complaints.
+                        You have access to monthly counts of complaints over the past year.
+                        
+                        When describing trends, you should:
+                        1. Identify the overall direction (increasing, decreasing, stable, or fluctuating)
+                        2. Point out any significant month-to-month changes
+                        3. Mention the months with highest and lowest complaint volumes
+                        4. Note any seasonal patterns if apparent
+                        5. Compare recent months to earlier months
+                        
+                        Your answers should be:
+                        1. Factual and based ONLY on the data provided
+                        2. Concise and clear
+                        3. Include specific numbers from the monthly data
+                        
+                        Format your answer as a clear analysis that can stand alone without requiring a chart,
+                        but also indicate that a visual representation is available if the user wants to see it.
+                        """
+                        
+                        # Update the user message with enhanced data
+                        user_message = f"""Here is the refrigerator complaint data:
+
+{data_context}
+
+Question: {question}
+
+Please provide a clear, concise answer based on this data."""
+                        
+                        # Re-call OpenAI with enhanced data
+                        logger.debug("Re-calling OpenAI API with enhanced trend data...")
+                        response = client.chat.completions.create(
+                            model="gpt-4-turbo-preview",
+                            messages=[
+                                {"role": "system", "content": trend_system_message},
+                                {"role": "user", "content": user_message}
+                            ],
+                            temperature=0.3,
+                            max_tokens=500
+                        )
+                        
+                        # Get the updated answer
+                        answer = response.choices[0].message.content.strip()
+                        logger.debug("Successfully generated enhanced trend response")
+                except Exception as e:
+                    logger.error(f"Error enhancing trend data: {e}")
+                    # Continue with original response if enhancement fails
             
             return jsonify({
                 'answer': answer,
@@ -2772,14 +2850,83 @@ def get_complaints_monthly_trend():
         # Create a Plotly figure
         import plotly.graph_objects as go
         
+        # Add annotations for significant points
+        annotations = []
+        
+        # Find max and min points
+        if counts:
+            max_index = counts.index(max(counts))
+            min_index = counts.index(min(counts))
+            
+            # Only add annotations if we have enough data points
+            if len(counts) > 2:
+                annotations.append(dict(
+                    x=months[max_index],
+                    y=counts[max_index],
+                    text=f"Peak: {counts[max_index]}",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor="#d62728",
+                    ax=0,
+                    ay=-40
+                ))
+                
+                annotations.append(dict(
+                    x=months[min_index],
+                    y=counts[min_index],
+                    text=f"Low: {counts[min_index]}",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowsize=1,
+                    arrowwidth=2,
+                    arrowcolor="#2ca02c",
+                    ax=0,
+                    ay=-40
+                ))
+        
+        # Calculate month-over-month changes
+        pct_changes = []
+        for i in range(1, len(counts)):
+            if counts[i-1] > 0:
+                pct_change = (counts[i] - counts[i-1]) / counts[i-1] * 100
+                pct_changes.append(f"{pct_change:.1f}%")
+            else:
+                pct_changes.append("N/A")
+        
+        # Insert empty first value
+        pct_changes.insert(0, "")
+        
+        # Create hover text with month-over-month changes
+        hover_texts = []
+        for i, (month, count) in enumerate(zip(months, counts)):
+            if i > 0:
+                hover_texts.append(f"Month: {month}<br>Count: {count}<br>Change: {pct_changes[i]}")
+            else:
+                hover_texts.append(f"Month: {month}<br>Count: {count}")
+        
         fig = go.Figure()
+        
+        # Add bar chart for monthly counts
+        fig.add_trace(go.Bar(
+            x=months,
+            y=counts,
+            name='Complaints',
+            marker_color='#007bff',
+            opacity=0.7,
+            hovertext=hover_texts,
+            hoverinfo='text'
+        ))
+        
+        # Add line chart overlay
         fig.add_trace(go.Scatter(
             x=months,
             y=counts,
             mode='lines+markers',
-            name='Complaints',
-            line=dict(color='#007bff', width=3),
-            marker=dict(size=10, color='#007bff')
+            name='Trend',
+            line=dict(color='#ff7f0e', width=3),
+            marker=dict(size=8, color='#ff7f0e')
         ))
         
         # Add a trend line
@@ -2790,27 +2937,53 @@ def get_complaints_monthly_trend():
             x=months,
             y=p(range(len(months))),
             mode='lines',
-            name='Trend',
+            name='Trend Line',
             line=dict(color='#dc3545', width=2, dash='dash')
         ))
         
+        # Calculate overall trend percentage change if we have data
+        trend_description = ""
+        if len(counts) > 1 and counts[0] > 0:
+            total_change_pct = (counts[-1] - counts[0]) / counts[0] * 100
+            trend_direction = "increase" if total_change_pct > 0 else "decrease"
+            trend_description = f"{abs(total_change_pct):.1f}% {trend_direction} over period"
+        
         fig.update_layout(
-            title='Monthly Complaints Trend',
+            title=dict(
+                text='Monthly Complaints Trend' + (f' ({trend_description})' if trend_description else ''),
+                font=dict(size=20)
+            ),
             xaxis_title='Month',
             yaxis_title='Number of Complaints',
             showlegend=True,
-            height=500,
-            width=800,
-            margin=dict(t=50, b=50, l=50, r=50),
-            yaxis=dict(rangemode='nonnegative'),
-            xaxis=dict(tickangle=-45),
-            hovermode='x unified'
+            height=600,
+            width=900,
+            margin=dict(t=80, b=50, l=50, r=50),
+            yaxis=dict(
+                rangemode='nonnegative',
+                gridcolor='rgba(0,0,0,0.1)',
+            ),
+            xaxis=dict(
+                tickangle=-45,
+                gridcolor='rgba(0,0,0,0.05)',
+            ),
+            hovermode='closest',
+            barmode='overlay',
+            plot_bgcolor='rgba(240,240,240,0.2)',
+            annotations=annotations,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.2,
+                xanchor="left",
+                x=0
+            )
         )
         
         # Add a hover template with more information
         fig.update_traces(
             hovertemplate='%{y} complaints in %{x}<extra></extra>',
-            selector=dict(name='Complaints')
+            selector=dict(name='Trend')
         )
         
         import plotly
