@@ -2395,6 +2395,45 @@ def process_data_query():
             total_complaints_last_month = cursor.fetchone()[0]
             logger.debug(f"Total complaints last month: {total_complaints_last_month}")
             
+            # Get product model statistics
+            cursor.execute("""
+                SELECT 
+                    COALESCE(data->'productInformation'->>'modelNumber', 'Unknown') as model,
+                    COUNT(*) as count,
+                    ROUND((COUNT(*) * 100.0 / 
+                        NULLIF((SELECT COUNT(*) FROM complaints 
+                               WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                               AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s), 0))::numeric, 1) as percentage
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                GROUP BY model
+                ORDER BY count DESC
+                LIMIT 10;
+            """, (last_three_months_start, current_date, last_three_months_start, current_date))
+            
+            model_stats = cursor.fetchall()
+            logger.debug(f"Found {len(model_stats)} product models")
+            
+            # Get top brands with complaints
+            cursor.execute("""
+                SELECT 
+                    COALESCE(data->'productInformation'->>'brand', 'Unknown') as brand,
+                    COUNT(*) as count,
+                    ROUND((COUNT(*) * 100.0 / 
+                        NULLIF((SELECT COUNT(*) FROM complaints 
+                               WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                               AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s), 0))::numeric, 1) as percentage
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                GROUP BY brand
+                ORDER BY count DESC;
+            """, (last_three_months_start, current_date, last_three_months_start, current_date))
+            
+            brand_stats = cursor.fetchall()
+            logger.debug(f"Found {len(brand_stats)} brands")
+            
             # Get resolution status data for the last 3 months
             cursor.execute("""
                 SELECT 
@@ -2465,6 +2504,20 @@ Complaint Categories and Counts:
 LAST 3 MONTHS DATA (from {last_three_months_start} to {current_date}):
 Total Complaints: {total_complaints_three_months}
 
+Top Product Models by Complaint Count:
+"""
+            for model, count, percentage in model_stats:
+                if model and count is not None and percentage is not None:
+                    data_context += f"- {model}: {count} complaints ({percentage}%)\n"
+            
+            data_context += """
+Top Brands by Complaint Count:
+"""
+            for brand, count, percentage in brand_stats:
+                if brand and count is not None and percentage is not None:
+                    data_context += f"- {brand}: {count} complaints ({percentage}%)\n"
+            
+            data_context += """
 Resolution Status:
 """
             for status, count, percentage in resolution_stats:
@@ -2495,6 +2548,8 @@ Monthly Resolution Rates:
             
             For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
             For category questions, use the AI category information.
+            For product model questions, refer to the "Top Product Models by Complaint Count" section.
+            For brand questions, refer to the "Top Brands by Complaint Count" section.
             
             Your answers should be:
             1. Factual and based ONLY on the data provided
