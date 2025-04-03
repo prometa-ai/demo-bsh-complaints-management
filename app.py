@@ -176,22 +176,34 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         
         # Add time period filter
         if time_period:
+            logger.info(f"Applying time period filter: {time_period}")
+            logger.info(f"SQL query before time filter: {query}")
+            
             if time_period == '24h':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '24 hours'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '24 hours'"
+                logger.info("Applied 24 hours filter")
             elif time_period == '1w':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 week'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 week'"
+                logger.info("Applied 1 week filter")
             elif time_period == '30d':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '30 days'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '30 days'"
+                logger.info("Applied 30 days filter")
             elif time_period == '3m':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '3 months'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '3 months'"
+                logger.info("Applied 3 months filter")
             elif time_period == '6m':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '6 months'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '6 months'"
+                logger.info("Applied 6 months filter")
             elif time_period == '1y':
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' >= NOW() - INTERVAL '1 year'"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp >= NOW() - INTERVAL '1 year'"
+                logger.info("Applied 1 year filter")
             elif time_period.startswith('custom:'):
                 start_date, end_date = time_period.split(':')[1:]
-                query += " AND c.data->'complaintDetails'->>'dateOfComplaint' BETWEEN %s AND %s"
+                query += " AND (c.data->'complaintDetails'->>'dateOfComplaint')::timestamp BETWEEN %s::timestamp AND %s::timestamp"
                 params.extend([start_date, end_date])
+                logger.info(f"Applied custom date range filter: {start_date} to {end_date}")
+            
+            logger.info(f"SQL query after time filter: {query}")
         
         # Add country filter
         if country:
@@ -238,6 +250,11 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         
         cursor.execute(query, params)
         complaints = cursor.fetchall()
+        
+        logger.info(f"Query executed with {len(complaints)} results")
+        if complaints:
+            logger.info(f"First complaint ID: {complaints[0][0]}")
+            logger.info(f"First complaint date format: {complaints[0][1]['complaintDetails'].get('dateOfComplaint', 'NOT FOUND')}")
         
         cursor.close()
         conn.close()
