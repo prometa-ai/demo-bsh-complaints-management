@@ -2434,6 +2434,24 @@ def process_data_query():
             brand_stats = cursor.fetchall()
             logger.debug(f"Found {len(brand_stats)} brands")
             
+            # Get resolution rates by brand
+            cursor.execute("""
+                SELECT 
+                    COALESCE(data->'productInformation'->>'brand', 'Unknown') as brand,
+                    COUNT(*) as total_complaints,
+                    SUM(CASE WHEN data->'complaintDetails'->>'resolutionStatus' = 'Resolved' THEN 1 ELSE 0 END) as resolved_complaints,
+                    ROUND((SUM(CASE WHEN data->'complaintDetails'->>'resolutionStatus' = 'Resolved' THEN 1 ELSE 0 END) * 100.0 / 
+                        NULLIF(COUNT(*), 0))::numeric, 1) as resolution_rate
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                GROUP BY brand
+                ORDER BY total_complaints DESC;
+            """, (last_three_months_start, current_date))
+            
+            brand_resolution_stats = cursor.fetchall()
+            logger.debug(f"Found resolution stats for {len(brand_resolution_stats)} brands")
+            
             # Get resolution status data for the last 3 months
             cursor.execute("""
                 SELECT 
@@ -2518,6 +2536,13 @@ Top Brands by Complaint Count:
                     data_context += f"- {brand}: {count} complaints ({percentage}%)\n"
             
             data_context += """
+Brand Resolution Rates (Last 3 Months):
+"""
+            for brand, total, resolved, rate in brand_resolution_stats:
+                if brand and total is not None and resolved is not None and rate is not None:
+                    data_context += f"- {brand}: {resolved} resolved out of {total} complaints ({rate}% resolution rate)\n"
+            
+            data_context += """
 Resolution Status:
 """
             for status, count, percentage in resolution_stats:
@@ -2547,6 +2572,7 @@ Monthly Resolution Rates:
             Use this data to provide accurate, specific answers to questions.
             
             For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
+            For brand-specific resolution rates, refer to the "Brand Resolution Rates" section.
             For category questions, use the AI category information.
             For product model questions, refer to the "Top Product Models by Complaint Count" section.
             For brand questions, refer to the "Top Brands by Complaint Count" section.
