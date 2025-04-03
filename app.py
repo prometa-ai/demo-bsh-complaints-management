@@ -146,13 +146,13 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         # Base query with CTE for latest technical notes
         query = """
         WITH latest_notes AS (
-            SELECT 
+            SELECT DISTINCT ON (complaint_id)
                 complaint_id,
                 data->'ai_analysis'->>'openai_category' as ai_category
             FROM technical_notes
             WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
             AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-            ORDER BY id DESC
+            ORDER BY complaint_id, id DESC
         )
         SELECT 
             c.id,
@@ -160,7 +160,11 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             tn.data as technical_notes
         FROM complaints c
         LEFT JOIN latest_notes ln ON c.id = ln.complaint_id
-        LEFT JOIN technical_notes tn ON c.id = tn.complaint_id
+        LEFT JOIN (
+            SELECT DISTINCT ON (complaint_id) *
+            FROM technical_notes
+            ORDER BY complaint_id, id DESC
+        ) tn ON c.id = tn.complaint_id
         WHERE 1=1
         """
         
@@ -1402,11 +1406,18 @@ def list_complaints():
         
         # Get unique AI Categories for the dropdown
         cursor.execute("""
-            SELECT DISTINCT data->'ai_analysis'->>'openai_category' as ai_category
-            FROM technical_notes
-            WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
-            AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-            AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
+            WITH latest_categories AS (
+                SELECT DISTINCT ON (complaint_id)
+                    complaint_id,
+                    data->'ai_analysis'->>'openai_category' as ai_category
+                FROM technical_notes
+                WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
+                AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+                AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
+                ORDER BY complaint_id, id DESC
+            )
+            SELECT DISTINCT ai_category
+            FROM latest_categories
             ORDER BY ai_category
         """)
         ai_categories = [row[0] for row in cursor.fetchall()]
