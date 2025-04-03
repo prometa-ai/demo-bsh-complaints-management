@@ -20,15 +20,19 @@ import plotly.graph_objects as go
 import plotly.utils
 import flask
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from markupsafe import Markup
 
 # Import OpenAI for AI analysis
 import openai
 from dotenv import load_dotenv
 
+# Add this with your other imports
+import secrets
+from functools import wraps
+
 app = Flask(__name__)
-app.secret_key = 'bsh_complaint_management_key'
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -1314,13 +1318,48 @@ CONFIDENCE: (level and explanation)"""}
         print(f"Error generating AI analysis: {str(e)}")
         return default_response
 
-# Routes
+# Add these functions before your routes
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Add these routes before your existing routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # For demo purposes - in production you would check against a database
+        if username == 'admin' and password == 'bshcomplaintadmin':
+            session['user'] = username
+            flash('Login successful!', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        else:
+            flash('Invalid credentials. Please try again.', 'danger')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
+
+# Now update your existing routes to require login
 @app.route('/')
+@login_required
 def index():
     """Home page - redirects to complaints page."""
     return redirect(url_for('list_complaints'))
 
 @app.route('/complaints')
+@login_required
 def list_complaints():
     try:
         page = int(request.args.get('page', 1))
@@ -1416,6 +1455,7 @@ def list_complaints():
         return redirect(url_for('index'))
 
 @app.route('/complaints/<int:complaint_id>/unified', methods=['GET', 'POST'])
+@login_required
 def unified_complaint(complaint_id):
     try:
         print(f"Attempting to fetch complaint {complaint_id}")
@@ -1574,6 +1614,7 @@ def unified_complaint(complaint_id):
         return redirect(url_for('list_complaints'))
 
 @app.route('/statistics')
+@login_required
 def statistics():
     try:
         conn = connect_to_db()
@@ -1924,6 +1965,7 @@ def statistics():
         return redirect(url_for('index'))
 
 @app.route('/batch_process_complaints')
+@login_required
 def batch_process_complaints():
     """Process filtered complaints with technical notes to generate OpenAI predictions."""
     logger.debug("Accessed batch_process_complaints route")
@@ -2039,6 +2081,7 @@ def batch_process_complaints():
     return redirect(url_for('list_complaints', search=search, time_period=time_period, has_notes=has_notes))
 
 @app.route('/complaints/export')
+@login_required
 def export_complaints():
     """Export filtered complaints data to CSV."""
     logger.debug("Accessed complaints export route")
@@ -2270,11 +2313,13 @@ def export_complaints():
     return response
 
 @app.route('/talk_with_data')
+@login_required
 def talk_with_data():
     """Render the Talk with Data page."""
     return render_template('talk_with_data.html')
 
 @app.route('/talk_with_data/query', methods=['POST'])
+@login_required
 def process_data_query():
     """Process natural language queries about the complaint data."""
     conn = None
