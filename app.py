@@ -2323,6 +2323,7 @@ def talk_with_data():
 def process_data_query():
     """Process natural language queries about the complaint data."""
     conn = None
+    cursor = None
     try:
         data = request.get_json()
         question = data.get('question', '').strip()
@@ -2342,11 +2343,13 @@ def process_data_query():
         # Get the current date for time-based queries
         current_date = datetime.now().date()
         last_month_start = current_date - timedelta(days=30)
+        last_three_months_start = current_date - timedelta(days=90)
         
-        logger.debug(f"Querying data from {last_month_start} to {current_date}")
+        logger.debug(f"Querying data from {last_three_months_start} to {current_date}")
         
         # Get complaint statistics for the last month
         try:
+            # Get AI category distribution for the last month (keep this for familiar questions)
             cursor.execute("""
                 WITH ai_categories AS (
                     SELECT 
@@ -2389,13 +2392,68 @@ def process_data_query():
                 AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
             """, (last_month_start, current_date))
             
-            total_complaints = cursor.fetchone()[0]
-            logger.debug(f"Total complaints: {total_complaints}")
+            total_complaints_last_month = cursor.fetchone()[0]
+            logger.debug(f"Total complaints last month: {total_complaints_last_month}")
+            
+            # Get resolution status data for the last 3 months
+            cursor.execute("""
+                SELECT 
+                    COALESCE(data->'complaintDetails'->>'resolutionStatus', 'Not Specified') as status,
+                    COUNT(*) as count,
+                    ROUND((COUNT(*) * 100.0 / 
+                        NULLIF((SELECT COUNT(*) FROM complaints 
+                               WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                               AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s), 0))::numeric, 1) as percentage
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                GROUP BY status
+                ORDER BY count DESC;
+            """, (last_three_months_start, current_date, last_three_months_start, current_date))
+            
+            resolution_stats = cursor.fetchall()
+            logger.debug(f"Found {len(resolution_stats)} resolution statuses")
+            
+            # Get total complaints in the last 3 months
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM complaints
+                WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+            """, (last_three_months_start, current_date))
+            
+            total_complaints_three_months = cursor.fetchone()[0]
+            logger.debug(f"Total complaints in last 3 months: {total_complaints_three_months}")
+            
+            # Get resolution rate by month for trend analysis
+            cursor.execute("""
+                WITH monthly_data AS (
+                    SELECT 
+                        DATE_TRUNC('month', (data->'complaintDetails'->>'dateOfComplaint')::date) as month,
+                        data->'complaintDetails'->>'resolutionStatus' as status
+                    FROM complaints
+                    WHERE (data->'complaintDetails'->>'dateOfComplaint')::date >= %s
+                    AND (data->'complaintDetails'->>'dateOfComplaint')::date <= %s
+                )
+                SELECT 
+                    to_char(month, 'Month YYYY') as month_name,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved,
+                    ROUND((SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) * 100.0 / 
+                        NULLIF(COUNT(*), 0))::numeric, 1) as resolution_rate
+                FROM monthly_data
+                GROUP BY month, month_name
+                ORDER BY month DESC;
+            """, (last_three_months_start, current_date))
+            
+            monthly_resolution_stats = cursor.fetchall()
+            logger.debug(f"Found {len(monthly_resolution_stats)} months of resolution data")
             
             # Format the data for OpenAI
-            data_context = f"""Here is the complaint data for the last month (from {last_month_start} to {current_date}):
+            data_context = f"""Here is the refrigerator complaint data summary:
 
-Total Complaints: {total_complaints}
+LAST MONTH DATA (from {last_month_start} to {current_date}):
+Total Complaints: {total_complaints_last_month}
 
 Complaint Categories and Counts:
 """
@@ -2403,17 +2461,51 @@ Complaint Categories and Counts:
                 if category and count is not None and percentage is not None:
                     data_context += f"- {category}: {count} complaints ({percentage}%)\n"
             
+            data_context += f"""
+LAST 3 MONTHS DATA (from {last_three_months_start} to {current_date}):
+Total Complaints: {total_complaints_three_months}
+
+Resolution Status:
+"""
+            for status, count, percentage in resolution_stats:
+                if status and count is not None and percentage is not None:
+                    data_context += f"- {status}: {count} complaints ({percentage}%)\n"
+            
+            data_context += """
+Monthly Resolution Rates:
+"""
+            for month, total, resolved, rate in monthly_resolution_stats:
+                if month and total is not None and resolved is not None and rate is not None:
+                    data_context += f"- {month}: {resolved} resolved out of {total} complaints ({rate}% resolution rate)\n"
+            
+            # Calculate overall resolution rate for the last 3 months
+            resolved_count = 0
+            for status, count, percentage in resolution_stats:
+                if status == 'Resolved':
+                    resolved_count = count
+                    break
+            
+            overall_resolution_rate = round((resolved_count * 100.0 / total_complaints_three_months), 1) if total_complaints_three_months > 0 else 0
+            data_context += f"\nOverall Resolution Rate (last 3 months): {overall_resolution_rate}%\n"
+            
             # Prepare the system message for OpenAI
-            system_message = """You are a helpful assistant that answers questions about complaint data.
-            You have access to the following data about complaints in the last month.
+            system_message = """You are a helpful assistant that answers questions about refrigerator complaint data.
+            You have access to the following data about complaints from both the last month and the last 3 months.
             Use this data to provide accurate, specific answers to questions.
-            If a question asks about the most common complaint topic, use the category with the highest count.
-            If a question asks about percentages, use the provided percentage values.
-            Be concise and clear in your responses.
+            
+            For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
+            For category questions, use the AI category information.
+            
+            Your answers should be:
+            1. Factual and based ONLY on the data provided
+            2. Concise and clear
+            3. Include specific numbers and percentages when available
+            
+            If the data doesn't contain the information needed to answer the question accurately, clearly state this limitation.
             """
             
             # Prepare the user message with context
-            user_message = f"""Here is the complaint data for the last month:
+            user_message = f"""Here is the refrigerator complaint data:
 
 {data_context}
 
@@ -2429,7 +2521,7 @@ Please provide a clear, concise answer based on this data."""
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}
                 ],
-                temperature=0.7,
+                temperature=0.3,
                 max_tokens=500
             )
             
