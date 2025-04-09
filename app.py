@@ -147,19 +147,34 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         conn = connect_to_db()
         cursor = conn.cursor()
         
-        # Base query with CTE for latest technical notes
-        query = """
-        WITH latest_notes AS (
-            SELECT DISTINCT ON (complaint_id)
-                complaint_id,
-                data->'ai_analysis'->>'openai_category' as ai_category
-            FROM technical_notes
-            WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
-            AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-            AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
-            ORDER BY complaint_id, id DESC
-        )
-        """
+        # Base query with CTE for latest technical notes - different handling depending on whether ai_category is specified
+        if ai_category:
+            # When filtering by ai_category, use the stricter filter
+            query = """
+            WITH latest_notes AS (
+                SELECT DISTINCT ON (complaint_id)
+                    complaint_id,
+                    data->'ai_analysis'->>'openai_category' as ai_category
+                FROM technical_notes
+                WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
+                AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+                AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
+                ORDER BY complaint_id, id DESC
+            )
+            """
+        else:
+            # When not filtering by ai_category, use the more permissive filter
+            query = """
+            WITH latest_notes AS (
+                SELECT DISTINCT ON (complaint_id)
+                    complaint_id,
+                    data->'ai_analysis'->>'openai_category' as ai_category
+                FROM technical_notes
+                WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
+                AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+                ORDER BY complaint_id, id DESC
+            )
+            """
         
         # If AI Category filter is applied, use JOIN instead of LEFT JOIN
         if ai_category:
