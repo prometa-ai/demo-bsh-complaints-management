@@ -463,8 +463,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 voiceInputBtn.disabled = false;
                 chatForm.querySelector('button[type="submit"]').disabled = false;
                 
-                // Focus on the input field after transcription
-                userInput.focus();
+                // Auto submit the form after transcription
+                if (data.transcription.trim() !== '') {
+                    chatForm.dispatchEvent(new Event('submit'));
+                }
             } else if (data.error) {
                 alert('Error transcribing audio: ' + data.error);
                 userInput.disabled = false;
