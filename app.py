@@ -2962,14 +2962,14 @@ def get_complaints_monthly_trend():
         fig.update_layout(
             title=dict(
                 text='Monthly Complaints Trend' + (f' ({trend_description})' if trend_description else ''),
-                font=dict(size=20)
+                font=dict(size=16)
             ),
             xaxis_title='Month',
             yaxis_title='Number of Complaints',
             showlegend=True,
-            height=600,
-            width=900,
-            margin=dict(t=80, b=50, l=50, r=50),
+            height=400,
+            width=700,
+            margin=dict(t=60, b=80, l=50, r=30),
             yaxis=dict(
                 rangemode='nonnegative',
                 gridcolor='rgba(0,0,0,0.1)',
@@ -2985,9 +2985,9 @@ def get_complaints_monthly_trend():
             legend=dict(
                 orientation="h",
                 yanchor="top",
-                y=-0.2,
-                xanchor="left",
-                x=0
+                y=-0.25,
+                xanchor="center",
+                x=0.5
             )
         )
         

@@ -136,6 +136,14 @@
     border-radius: 5px;
     padding: 10px;
     background-color: white;
+    height: 400px;
+    width: 100%;
+}
+
+.loading-indicator {
+    text-align: center;
+    padding: 20px;
+    color: #6c757d;
 }
 </style>
 
@@ -172,13 +180,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const time = new Date().toLocaleTimeString();
         let messageContent = `<div>${content}</div>`;
         
-        // Add a button to show chart if this is a trend query
+        // Add chart container if this is a trend query
         if (!isUser && isTrendQuery) {
+            const chartId = 'chart-' + Date.now();
             messageContent += `
-                <div class="chart-button" onclick="showTrendChart()">
-                    <i class="fas fa-chart-line me-1"></i> View Interactive Chart
+                <div class="loading-indicator" id="loading-${chartId}">
+                    <i class="fas fa-spinner fa-spin me-2"></i> Loading chart...
                 </div>
+                <div class="chart-container" id="${chartId}" style="display: none;"></div>
             `;
+            
+            // Set timeout to load the chart after the message is added to DOM
+            setTimeout(() => {
+                loadTrendChart(chartId);
+            }, 100);
         }
         
         messageContent += `<div class="message-time">${time}</div>`;
@@ -188,7 +203,58 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
     
-    // Function to load and display the trend chart
+    // Function to load and display the trend chart directly in the message
+    function loadTrendChart(chartId) {
+        const chartContainer = document.getElementById(chartId);
+        const loadingIndicator = document.getElementById(`loading-${chartId}`);
+        
+        fetch('/talk_with_data/monthly_trend')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error loading chart data:', data.error);
+                    loadingIndicator.innerHTML = '<div class="text-danger">Error loading chart data</div>';
+                    return;
+                }
+                
+                // Parse the chart JSON and render it in the message container
+                const chartJson = JSON.parse(data.chart);
+                
+                // Adjust layout for inline display
+                if (chartJson.layout) {
+                    chartJson.layout.height = 350;
+                    chartJson.layout.width = null; // Let it be responsive
+                    chartJson.layout.autosize = true;
+                    chartJson.layout.margin = { t: 50, b: 50, l: 50, r: 20 };
+                    
+                    // Move legend to bottom if it exists
+                    if (chartJson.layout.legend) {
+                        chartJson.layout.legend.orientation = "h";
+                        chartJson.layout.legend.y = -0.2;
+                        chartJson.layout.legend.x = 0;
+                    }
+                }
+                
+                // Hide loading indicator and show chart
+                loadingIndicator.style.display = 'none';
+                chartContainer.style.display = 'block';
+                
+                // Create the chart
+                Plotly.newPlot(chartId, chartJson.data, chartJson.layout, {
+                    responsive: true,
+                    displayModeBar: false
+                });
+                
+                // Scroll to show the chart
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loadingIndicator.innerHTML = '<div class="text-danger">Failed to load chart</div>';
+            });
+    }
+    
+    // For backwards compatibility
     window.showTrendChart = function() {
         fetch('/talk_with_data/monthly_trend')
             .then(response => response.json())
