@@ -273,6 +273,18 @@
     margin-right: 5px;
 }
 
+.audio-controls {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.audio-controls button {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
 .recording-status-inline {
     display: flex;
     align-items: center;
@@ -520,9 +532,59 @@ document.addEventListener('DOMContentLoaded', function() {
                 audioPlayer.controls = false;
                 audioPlayer.style.display = 'none';
                 audioPlayer.addEventListener('ended', function() {
-                    // Optional: Do something when audio playback ends
+                    // Update button state when audio ends
+                    const button = document.getElementById(`${messageId}-listen-btn`);
+                    if (button) {
+                        button.innerHTML = '<i class="fas fa-play"></i> Listen';
+                        button.setAttribute('data-playing', 'false');
+                    }
                 });
                 contentDiv.appendChild(audioPlayer);
+                
+                // Add listen/stop buttons
+                const audioControls = document.createElement('div');
+                audioControls.className = 'audio-controls mt-2';
+                
+                const listenButton = document.createElement('button');
+                listenButton.className = 'btn btn-sm btn-outline-primary me-2';
+                listenButton.id = `${messageId}-listen-btn`;
+                listenButton.innerHTML = '<i class="fas fa-play"></i> Listen';
+                listenButton.setAttribute('data-playing', 'false');
+                listenButton.addEventListener('click', function() {
+                    const audioElement = document.getElementById(`${messageId}-audio`);
+                    if (!audioElement) return;
+                    
+                    const isPlaying = this.getAttribute('data-playing') === 'true';
+                    
+                    // Pause all other playing audios first
+                    document.querySelectorAll('audio').forEach(audio => {
+                        if (audio.id !== `${messageId}-audio` && !audio.paused) {
+                            audio.pause();
+                            const otherBtn = document.getElementById(`${audio.id.replace('-audio', '')}-listen-btn`);
+                            if (otherBtn) {
+                                otherBtn.innerHTML = '<i class="fas fa-play"></i> Listen';
+                                otherBtn.setAttribute('data-playing', 'false');
+                            }
+                        }
+                    });
+                    
+                    if (isPlaying) {
+                        // Currently playing, so pause
+                        audioElement.pause();
+                        this.innerHTML = '<i class="fas fa-play"></i> Listen';
+                        this.setAttribute('data-playing', 'false');
+                    } else {
+                        // Currently paused, so play
+                        audioElement.play().catch(e => {
+                            console.error('Error playing audio:', e);
+                        });
+                        this.innerHTML = '<i class="fas fa-pause"></i> Stop';
+                        this.setAttribute('data-playing', 'true');
+                    }
+                });
+                
+                audioControls.appendChild(listenButton);
+                contentDiv.appendChild(audioControls);
             }
             
             // Add chart container if this is a trend query
@@ -591,6 +653,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Automatically play the audio
                 audioElement.play().catch(e => {
                     console.error('Auto-play failed:', e);
+                    // Update button state if auto-play fails
+                    const button = document.getElementById(`${messageId}-listen-btn`);
+                    if (button) {
+                        button.innerHTML = '<i class="fas fa-play"></i> Listen';
+                        button.setAttribute('data-playing', 'false');
+                    }
+                }).then(() => {
+                    // Update button state if auto-play succeeds
+                    const button = document.getElementById(`${messageId}-listen-btn`);
+                    if (button) {
+                        button.innerHTML = '<i class="fas fa-pause"></i> Stop';
+                        button.setAttribute('data-playing', 'true');
+                    }
                 });
             }
         })
