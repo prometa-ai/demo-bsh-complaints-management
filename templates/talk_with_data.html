@@ -388,8 +388,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 recording = true;
                 
                 // Update UI to show recording state
-                document.getElementById('recording-status-inline').classList.remove('d-none');
-                document.getElementById('voice-input-btn').classList.add('recording');
+                recordingStatusInline.classList.remove('d-none');
+                voiceInputBtn.classList.add('recording');
                 
                 // Start timer
                 startTime = Date.now();
@@ -406,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 mediaRecorder.addEventListener("stop", function() {
                     // Create audio blob and send to server
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     
                     // Clean up recording state
                     recording = false;
@@ -414,12 +414,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     clearInterval(timerInterval);
                     
                     // Show processing state
-                    document.getElementById('recording-status-inline').classList.add('d-none');
-                    document.getElementById('voice-input-btn').classList.remove('recording');
-                    document.getElementById('voice-input-btn').disabled = true;
-                    document.getElementById('chat-input').disabled = true;
-                    document.getElementById('send-btn').disabled = true;
-                    document.getElementById('processing-indicator').classList.remove('d-none');
+                    recordingStatusInline.classList.add('d-none');
+                    voiceInputBtn.classList.remove('recording');
+                    userInput.disabled = true;
+                    chatForm.querySelector('button[type="submit"]').disabled = true;
                     
                     // Send audio to server
                     sendAudioToServer(audioBlob);
@@ -446,43 +444,40 @@ document.addEventListener('DOMContentLoaded', function() {
         const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
         const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
         const seconds = (elapsedTime % 60).toString().padStart(2, '0');
-        document.getElementById('recording-timer').textContent = `${minutes}:${seconds}`;
+        recordingTimerInline.textContent = `${minutes}:${seconds}`;
     }
     
     function sendAudioToServer(audioBlob) {
         const formData = new FormData();
         formData.append('audio', audioBlob);
         
-        fetch('/transcribe_audio', {
+        fetch('/talk_with_data/stt', {
             method: 'POST',
             body: formData
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
-                document.getElementById('chat-input').value = data.text;
-                document.getElementById('processing-indicator').classList.add('d-none');
-                document.getElementById('voice-input-btn').disabled = false;
-                document.getElementById('chat-input').disabled = false;
-                document.getElementById('send-btn').disabled = false;
+            if (data.transcription) {
+                userInput.value = data.transcription;
+                userInput.disabled = false;
+                voiceInputBtn.disabled = false;
+                chatForm.querySelector('button[type="submit"]').disabled = false;
                 
                 // Focus on the input field after transcription
-                document.getElementById('chat-input').focus();
-            } else {
+                userInput.focus();
+            } else if (data.error) {
                 alert('Error transcribing audio: ' + data.error);
-                document.getElementById('processing-indicator').classList.add('d-none');
-                document.getElementById('voice-input-btn').disabled = false;
-                document.getElementById('chat-input').disabled = false;
-                document.getElementById('send-btn').disabled = false;
+                userInput.disabled = false;
+                voiceInputBtn.disabled = false;
+                chatForm.querySelector('button[type="submit"]').disabled = false;
             }
         })
         .catch(error => {
             console.error('Error sending audio to server:', error);
             alert('Error sending audio to server: ' + error);
-            document.getElementById('processing-indicator').classList.add('d-none');
-            document.getElementById('voice-input-btn').disabled = false;
-            document.getElementById('chat-input').disabled = false;
-            document.getElementById('send-btn').disabled = false;
+            userInput.disabled = false;
+            voiceInputBtn.disabled = false;
+            chatForm.querySelector('button[type="submit"]').disabled = false;
         });
     }
     
