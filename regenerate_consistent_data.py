@@ -123,6 +123,37 @@ def random_date(start_date, end_date):
     random_number_of_days = random.randrange(max(1, days_between_dates))
     return start_date + timedelta(days=random_number_of_days)
 
+def generate_country_specific_data(country):
+    """Generate customer data specific to a country."""
+    faker = Faker(country)
+    
+    # Generate a name format appropriate for the country
+    name = faker.name()
+    
+    # Generate address information
+    address = faker.street_address()
+    city = faker.city()
+    
+    # Generate postal code
+    postal_code = faker.postcode()
+    
+    # Generate phone number
+    phone = faker.phone_number()
+    
+    # Generate email (with ASCII-only domain)
+    name_part = ''.join(c for c in name.lower() if c.isalnum())[:8]
+    email = f"{name_part}{random.randint(1, 999)}@example.com"
+    
+    return {
+        "fullName": name,
+        "address": address,
+        "city": city,
+        "stateProvince": faker.state() if country in ["United States"] else "",
+        "postalCode": postal_code,
+        "phoneNumber": phone,
+        "emailAddress": email
+    }
+
 def generate_consistent_complaint():
     """Generate a random complaint data structure that will be consistent with technical notes."""
     
@@ -213,15 +244,7 @@ def generate_consistent_complaint():
     
     # Create the complaint data structure
     complaint = {
-        "customerInformation": {
-            "fullName": fake.name(),
-            "address": fake.street_address(),
-            "city": fake.city(),
-            "stateProvince": fake.state(),
-            "postalCode": fake.zipcode(),
-            "phoneNumber": fake.phone_number(),
-            "emailAddress": fake.email()
-        },
+        "customerInformation": generate_country_specific_data("United States"),
         "productInformation": {
             "modelNumber": f"BSH-R{fake.random_int(min=1000, max=9999)}",
             "serialNumber": fake.uuid4().upper()[:12],
@@ -399,15 +422,7 @@ def create_special_case_angela_best():
     
     # Create Angela Best's complaint with the lighting issue
     complaint = {
-        "customerInformation": {
-            "fullName": "Angela Best",
-            "address": fake.street_address(),
-            "city": fake.city(),
-            "stateProvince": fake.state(),
-            "postalCode": fake.zipcode(),
-            "phoneNumber": fake.phone_number(),
-            "emailAddress": fake.email()
-        },
+        "customerInformation": generate_country_specific_data("Germany"),
         "productInformation": {
             "modelNumber": "BSH-R8480",
             "serialNumber": fake.uuid4().upper()[:12],
