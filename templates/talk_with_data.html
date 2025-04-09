@@ -25,21 +25,32 @@
                                 <i class="fas fa-paper-plane"></i> Send
                             </button>
                         </div>
-                        <div class="mt-2 d-flex align-items-center">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="tts-toggle" checked>
-                                <label class="form-check-label text-muted" for="tts-toggle">Text-to-Speech</label>
+                        <div class="mt-2 d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="tts-toggle" checked>
+                                    <label class="form-check-label text-muted" for="tts-toggle">Text-to-Speech</label>
+                                </div>
+                                <div class="ms-3 voice-selector" style="display: flex; align-items: center;">
+                                    <label class="text-muted me-2" style="font-size: 0.9rem;">Voice:</label>
+                                    <select id="voice-select" class="form-select form-select-sm" style="width: auto;">
+                                        <option value="alloy">Alloy</option>
+                                        <option value="echo">Echo</option>
+                                        <option value="fable">Fable</option>
+                                        <option value="onyx">Onyx</option>
+                                        <option value="nova">Nova</option>
+                                        <option value="shimmer">Shimmer</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="ms-3 voice-selector" style="display: flex; align-items: center;">
-                                <label class="text-muted me-2" style="font-size: 0.9rem;">Voice:</label>
-                                <select id="voice-select" class="form-select form-select-sm" style="width: auto;">
-                                    <option value="alloy">Alloy</option>
-                                    <option value="echo">Echo</option>
-                                    <option value="fable">Fable</option>
-                                    <option value="onyx">Onyx</option>
-                                    <option value="nova">Nova</option>
-                                    <option value="shimmer">Shimmer</option>
-                                </select>
+                            <div id="recording-status-inline" class="recording-status-inline d-none">
+                                <div class="d-flex align-items-center">
+                                    <div class="recording-dot me-2"></div>
+                                    <span id="recording-timer-inline">00:00</span>
+                                    <button type="button" id="stop-recording-btn" class="btn btn-sm btn-danger ms-2">
+                                        Stop
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </form>
@@ -83,43 +94,6 @@
                             Show me the trend of complaints over time.
                         </li>
                     </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Audio Recording Modal -->
-<div class="modal fade" id="recordingModal" tabindex="-1" aria-labelledby="recordingModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="recordingModalLabel">Voice Recording</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body text-center">
-                <div id="recording-status">
-                    <div class="recording-indicator mb-3">
-                        <i class="fas fa-microphone fa-4x recording-icon"></i>
-                        <div class="recording-waves">
-                            <span></span><span></span><span></span><span></span>
-                        </div>
-                    </div>
-                    <p id="recording-text">Click to start recording your question</p>
-                    <div class="timer d-none" id="recording-timer">00:00</div>
-                </div>
-                
-                <div id="transcribing-status" class="d-none">
-                    <div class="spinner-border text-primary mb-3" role="status">
-                        <span class="visually-hidden">Transcribing...</span>
-                    </div>
-                    <p>Transcribing your question...</p>
-                </div>
-                
-                <div class="mt-4">
-                    <button class="btn btn-primary btn-lg" id="start-stop-recording">
-                        Start Recording
-                    </button>
                 </div>
             </div>
         </div>
@@ -298,6 +272,39 @@
 .play-button i {
     margin-right: 5px;
 }
+
+.recording-status-inline {
+    display: flex;
+    align-items: center;
+    color: #dc3545;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.recording-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
 </style>
 
 <!-- Add Plotly.js for interactive charts -->
@@ -311,14 +318,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const exampleQuestions = document.querySelectorAll('.example-question');
     const chartModal = new bootstrap.Modal(document.getElementById('chartModal'));
     const voiceInputBtn = document.getElementById('voice-input-btn');
-    const recordingModal = new bootstrap.Modal(document.getElementById('recordingModal'));
-    const startStopRecordingBtn = document.getElementById('start-stop-recording');
     const recordingStatus = document.getElementById('recording-status');
     const transcribingStatus = document.getElementById('transcribing-status');
     const recordingText = document.getElementById('recording-text');
     const recordingTimer = document.getElementById('recording-timer');
     const ttsToggle = document.getElementById('tts-toggle');
     const voiceSelect = document.getElementById('voice-select');
+    const stopRecordingBtn = document.getElementById('stop-recording-btn');
+    const recordingStatusInline = document.getElementById('recording-status-inline');
+    const recordingTimerInline = document.getElementById('recording-timer-inline');
     
     // Store voice preferences in localStorage
     if (localStorage.getItem('ttsEnabled') === 'false') {
@@ -338,11 +346,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Audio recording variables
-    let mediaRecorder;
     let audioChunks = [];
+    let mediaRecorder;
+    let recording = false;
     let timerInterval;
     let startTime;
-    let isRecording = false;
+    let mediaStream;
     
     // Add click event to example questions
     exampleQuestions.forEach(question => {
@@ -359,164 +368,123 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Voice input button click handler
-    voiceInputBtn.addEventListener('click', function() {
-        recordingModal.show();
-    });
-    
-    // Start/Stop recording button click handler
-    startStopRecordingBtn.addEventListener('click', function() {
-        if (!isRecording) {
+    // Microphone button click - now starts recording immediately
+    document.getElementById('voice-input-btn').addEventListener('click', function() {
+        if (!recording) {
             startRecording();
-        } else {
-            stopRecording();
         }
     });
     
-    // Function to start recording
+    // Stop recording button click
+    document.getElementById('stop-recording-btn').addEventListener('click', function() {
+        stopRecording();
+    });
+    
     function startRecording() {
+        // Get user media and start recording
         navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                isRecording = true;
-                startStopRecordingBtn.textContent = 'Stop Recording';
-                startStopRecordingBtn.classList.remove('btn-primary');
-                startStopRecordingBtn.classList.add('btn-danger');
-                recordingText.textContent = 'Recording in progress...';
-                recordingTimer.classList.remove('d-none');
+            .then(function(stream) {
+                mediaStream = stream;
+                recording = true;
+                
+                // Update UI to show recording state
+                document.getElementById('recording-status-inline').classList.remove('d-none');
+                document.getElementById('voice-input-btn').classList.add('recording');
                 
                 // Start timer
                 startTime = Date.now();
+                updateTimer();
                 timerInterval = setInterval(updateTimer, 1000);
                 
-                // Create media recorder with specific MIME type
-                const options = { mimeType: 'audio/webm' };
-                try {
-                    mediaRecorder = new MediaRecorder(stream, options);
-                } catch (e) {
-                    console.error('MediaRecorder error:', e);
-                    // Fallback to default options
-                    mediaRecorder = new MediaRecorder(stream);
-                }
+                // Create media recorder and start recording
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
                 
-                audioChunks = [];
-                
-                mediaRecorder.addEventListener('dataavailable', event => {
-                    if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                    }
+                mediaRecorder.addEventListener("dataavailable", function(event) {
+                    audioChunks.push(event.data);
                 });
                 
-                mediaRecorder.addEventListener('stop', () => {
-                    const tracks = stream.getTracks();
-                    tracks.forEach(track => track.stop());
+                mediaRecorder.addEventListener("stop", function() {
+                    // Create audio blob and send to server
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                     
-                    if (audioChunks.length > 0) {
-                        // Show transcribing status
-                        recordingStatus.classList.add('d-none');
-                        transcribingStatus.classList.remove('d-none');
-                        
-                        // Create audio blob and convert to WAV format
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        
-                        console.log('Audio recorded:', audioBlob.size, 'bytes');
-                        
-                        // Optional: Play back the recording to verify it worked
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        const audio = new Audio(audioUrl);
-                        audio.addEventListener('ended', URL.revokeObjectURL(audioUrl));
-                        
-                        // Send audio to server for transcription
-                        const formData = new FormData();
-                        formData.append('audio', audioBlob, 'recording.webm');
-                        
-                        fetch('/talk_with_data/stt', {
-                            method: 'POST',
-                            body: formData
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.error) {
-                                console.error('Transcription error:', data.error);
-                                alert('Failed to transcribe audio: ' + data.error);
-                            } else {
-                                // Fill input with transcription and submit
-                                userInput.value = data.transcription;
-                                recordingModal.hide();
-                                
-                                // Submit the form after a short delay
-                                setTimeout(() => {
-                                    chatForm.dispatchEvent(new Event('submit'));
-                                }, 300);
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            alert('Failed to transcribe audio. Please try again.');
-                        })
-                        .finally(() => {
-                            // Reset UI
-                            resetRecordingUI();
-                        });
-                    } else {
-                        console.error('No audio data recorded');
-                        alert('No audio recorded. Please try again.');
-                        resetRecordingUI();
-                    }
+                    // Clean up recording state
+                    recording = false;
+                    audioChunks = [];
+                    clearInterval(timerInterval);
+                    
+                    // Show processing state
+                    document.getElementById('recording-status-inline').classList.add('d-none');
+                    document.getElementById('voice-input-btn').classList.remove('recording');
+                    document.getElementById('voice-input-btn').disabled = true;
+                    document.getElementById('chat-input').disabled = true;
+                    document.getElementById('send-btn').disabled = true;
+                    document.getElementById('processing-indicator').classList.remove('d-none');
+                    
+                    // Send audio to server
+                    sendAudioToServer(audioBlob);
                 });
-                
-                // Start recording with timeslices to get data during recording
-                mediaRecorder.start(1000);
             })
-            .catch(error => {
+            .catch(function(error) {
                 console.error('Error accessing microphone:', error);
-                alert('Failed to access microphone. Please check your browser permissions.');
-                resetRecordingUI();
+                alert('Error accessing microphone: ' + error.message);
             });
     }
     
-    // Function to stop recording
     function stopRecording() {
-        if (mediaRecorder && isRecording) {
-            clearInterval(timerInterval);
+        if (recording && mediaRecorder) {
             mediaRecorder.stop();
-            isRecording = false;
+            
+            // Stop all tracks in the stream
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
         }
     }
     
-    // Function to update timer
     function updateTimer() {
         const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
         const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
         const seconds = (elapsedTime % 60).toString().padStart(2, '0');
-        recordingTimer.textContent = `${minutes}:${seconds}`;
+        document.getElementById('recording-timer').textContent = `${minutes}:${seconds}`;
+    }
+    
+    function sendAudioToServer(audioBlob) {
+        const formData = new FormData();
+        formData.append('audio', audioBlob);
         
-        // Auto-stop after 30 seconds
-        if (elapsedTime >= 30) {
-            stopRecording();
-        }
+        fetch('/transcribe_audio', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('chat-input').value = data.text;
+                document.getElementById('processing-indicator').classList.add('d-none');
+                document.getElementById('voice-input-btn').disabled = false;
+                document.getElementById('chat-input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                
+                // Focus on the input field after transcription
+                document.getElementById('chat-input').focus();
+            } else {
+                alert('Error transcribing audio: ' + data.error);
+                document.getElementById('processing-indicator').classList.add('d-none');
+                document.getElementById('voice-input-btn').disabled = false;
+                document.getElementById('chat-input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error sending audio to server:', error);
+            alert('Error sending audio to server: ' + error);
+            document.getElementById('processing-indicator').classList.add('d-none');
+            document.getElementById('voice-input-btn').disabled = false;
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+        });
     }
-    
-    // Reset recording UI
-    function resetRecordingUI() {
-        isRecording = false;
-        startStopRecordingBtn.textContent = 'Start Recording';
-        startStopRecordingBtn.classList.remove('btn-danger');
-        startStopRecordingBtn.classList.add('btn-primary');
-        recordingText.textContent = 'Click to start recording your question';
-        recordingTimer.textContent = '00:00';
-        recordingTimer.classList.add('d-none');
-        recordingStatus.classList.remove('d-none');
-        transcribingStatus.classList.add('d-none');
-        clearInterval(timerInterval);
-    }
-    
-    // Handle modal close event
-    document.getElementById('recordingModal').addEventListener('hidden.bs.modal', function () {
-        if (isRecording) {
-            stopRecording();
-        }
-        resetRecordingUI();
-    });
     
     function addMessage(content, isUser = false, isTrendQuery = false) {
         const messageDiv = document.createElement('div');
@@ -704,7 +672,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error:', error);
             });
     };
-    
+
     chatForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -734,4 +702,4 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-{% endblock %} 
+{% endblock %}
