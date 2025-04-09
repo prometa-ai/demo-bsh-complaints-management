@@ -147,36 +147,17 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         conn = connect_to_db()
         cursor = conn.cursor()
         
-        # Base query with CTE for latest technical notes - different handling depending on whether ai_category is specified
-        if ai_category:
-            # When filtering by ai_category, use the stricter filter
-            query = """
-            WITH latest_notes AS (
-                SELECT DISTINCT ON (complaint_id)
-                    complaint_id,
-                    data->'ai_analysis'->>'openai_category' as ai_category
-                FROM technical_notes
-                WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
-                AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-                AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
-                ORDER BY complaint_id, id DESC
-            )
-            """
-        else:
-            # When not filtering by ai_category, use the more permissive filter
-            query = """
-            WITH latest_notes AS (
-                SELECT DISTINCT ON (complaint_id)
-                    complaint_id,
-                    data->'ai_analysis'->>'openai_category' as ai_category
-                FROM technical_notes
-                WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
-                AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-                ORDER BY complaint_id, id DESC
-            )
-            """
+        # For all queries, get the latest technical note for each complaint
+        query = """
+        WITH latest_tech_notes AS (
+            SELECT DISTINCT ON (complaint_id)
+                id, complaint_id, data
+            FROM technical_notes
+            ORDER BY complaint_id, id DESC
+        )
+        """
         
-        # If AI Category filter is applied, use JOIN instead of LEFT JOIN
+        # If AI Category filter is applied
         if ai_category:
             query += """
             SELECT 
@@ -184,13 +165,8 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
                 c.data,
                 tn.data as technical_notes
             FROM complaints c
-            JOIN latest_notes ln ON c.id = ln.complaint_id
-            LEFT JOIN (
-                SELECT DISTINCT ON (complaint_id) *
-                FROM technical_notes
-                ORDER BY complaint_id, id DESC
-            ) tn ON c.id = tn.complaint_id
-            WHERE ln.ai_category = %s
+            INNER JOIN latest_tech_notes tn ON c.id = tn.complaint_id
+            WHERE tn.data->'ai_analysis'->>'openai_category' = %s
             """
             params = [ai_category]
         else:
@@ -200,12 +176,7 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
                 c.data,
                 tn.data as technical_notes
             FROM complaints c
-            LEFT JOIN latest_notes ln ON c.id = ln.complaint_id
-            LEFT JOIN (
-                SELECT DISTINCT ON (complaint_id) *
-                FROM technical_notes
-                ORDER BY complaint_id, id DESC
-            ) tn ON c.id = tn.complaint_id
+            LEFT JOIN latest_tech_notes tn ON c.id = tn.complaint_id
             WHERE 1=1
             """
             params = []
