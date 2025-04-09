@@ -158,21 +158,41 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
             ORDER BY complaint_id, id DESC
         )
-        SELECT 
-            c.id,
-            c.data,
-            tn.data as technical_notes
-        FROM complaints c
-        LEFT JOIN latest_notes ln ON c.id = ln.complaint_id
-        LEFT JOIN (
-            SELECT DISTINCT ON (complaint_id) *
-            FROM technical_notes
-            ORDER BY complaint_id, id DESC
-        ) tn ON c.id = tn.complaint_id
-        WHERE 1=1
         """
         
-        params = []
+        # If AI Category filter is applied, use JOIN instead of LEFT JOIN
+        if ai_category:
+            query += """
+            SELECT 
+                c.id,
+                c.data,
+                tn.data as technical_notes
+            FROM complaints c
+            JOIN latest_notes ln ON c.id = ln.complaint_id
+            LEFT JOIN (
+                SELECT DISTINCT ON (complaint_id) *
+                FROM technical_notes
+                ORDER BY complaint_id, id DESC
+            ) tn ON c.id = tn.complaint_id
+            WHERE ln.ai_category = %s
+            """
+            params = [ai_category]
+        else:
+            query += """
+            SELECT 
+                c.id,
+                c.data,
+                tn.data as technical_notes
+            FROM complaints c
+            LEFT JOIN latest_notes ln ON c.id = ln.complaint_id
+            LEFT JOIN (
+                SELECT DISTINCT ON (complaint_id) *
+                FROM technical_notes
+                ORDER BY complaint_id, id DESC
+            ) tn ON c.id = tn.complaint_id
+            WHERE 1=1
+            """
+            params = []
         
         # Add search filter
         if search:
@@ -236,11 +256,6 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
         if brand:
             query += " AND c.data->'productInformation'->>'brand' = %s"
             params.append(brand)
-            
-        # Add AI Category filter
-        if ai_category:
-            query += " AND ln.ai_category = %s AND ln.ai_category NOT LIKE '%(NO OPENAI PREDICTION)%'"
-            params.append(ai_category)
         
         # Add has_notes filter
         if has_notes:
@@ -1417,7 +1432,6 @@ def list_complaints():
                 FROM technical_notes
                 WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
                 AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
-                AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
                 ORDER BY complaint_id, id DESC
             )
             SELECT DISTINCT ai_category
