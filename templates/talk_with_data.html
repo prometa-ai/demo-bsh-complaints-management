@@ -309,9 +309,14 @@
 
 <!-- Add Plotly.js for interactive charts -->
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<!-- Add markdown-it for formatting -->
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize markdown parser
+    const md = window.markdownit();
+    
     const chatForm = document.getElementById('chat-form');
     const userInput = document.getElementById('user-input');
     const chatMessages = document.getElementById('chat-messages');
@@ -483,51 +488,56 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    function addMessage(content, isUser = false, isTrendQuery = false) {
+    // Function to add new messages to the chat
+    function appendMessage(content, isUser, messageId = null) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+        messageDiv.className = isUser ? 'chat-message user-message' : 'chat-message ai-message';
         
-        const time = new Date().toLocaleTimeString();
-        let messageContent = `<div>${content}</div>`;
-        
-        // Add text-to-speech button for assistant messages
-        if (!isUser && ttsToggle.checked) {
-            const messageId = 'msg-' + Date.now();
-            messageContent += `
-                <div class="audio-player" id="${messageId}-player">
-                    <button class="play-button" onclick="playTextToSpeech('${messageId}', this)">
-                        <i class="fas fa-play"></i> Listen
-                    </button>
-                    <audio id="${messageId}-audio" style="display:none;"></audio>
-                </div>
-            `;
-            messageDiv.setAttribute('data-message-id', messageId);
-            messageDiv.setAttribute('data-message-text', content);
+        // If no message ID is provided, generate one
+        if (!messageId) {
+            messageId = 'msg-' + Date.now();
         }
         
-        // Add chart container if this is a trend query
-        if (!isUser && isTrendQuery) {
-            const chartId = 'chart-' + Date.now();
-            messageContent += `
-                <div class="loading-indicator" id="loading-${chartId}">
-                    <i class="fas fa-spinner fa-spin me-2"></i> Loading chart...
-                </div>
-                <div class="chart-container" id="${chartId}" style="display: none;"></div>
-            `;
+        messageDiv.setAttribute('data-message-id', messageId);
+        
+        // Create user/AI icon
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'message-icon';
+        iconDiv.innerHTML = isUser ? 
+            '<i class="fas fa-user"></i>' : 
+            '<i class="fas fa-robot"></i>';
+        
+        // Create message content
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        
+        // Apply markdown formatting for AI messages
+        if (!isUser) {
+            contentDiv.innerHTML = md.render(content);
             
-            // Set timeout to load the chart after the message is added to DOM
-            setTimeout(() => {
-                loadTrendChart(chartId);
-            }, 100);
+            // Add audio player for AI messages if TTS is enabled
+            if (ttsToggle.checked) {
+                const audioPlayer = document.createElement('audio');
+                audioPlayer.id = `${messageId}-audio`;
+                audioPlayer.controls = false;
+                audioPlayer.style.display = 'none';
+                audioPlayer.addEventListener('ended', function() {
+                    // Optional: Do something when audio playback ends
+                });
+                contentDiv.appendChild(audioPlayer);
+            }
+        } else {
+            contentDiv.textContent = content;
         }
         
-        messageContent += `<div class="message-time">${time}</div>`;
-        messageDiv.innerHTML = messageContent;
-        
+        messageDiv.appendChild(iconDiv);
+        messageDiv.appendChild(contentDiv);
         chatMessages.appendChild(messageDiv);
+        
+        // Scroll to the bottom
         chatMessages.scrollTop = chatMessages.scrollHeight;
         
-        // Generate speech for assistant messages if TTS is enabled
+        // Generate speech for AI messages if TTS is enabled
         if (!isUser && ttsToggle.checked) {
             const messageId = messageDiv.getAttribute('data-message-id');
             generateSpeech(messageId, content);
@@ -558,6 +568,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (audioElement) {
                 const audioSrc = `data:audio/${data.format};base64,${data.audio}`;
                 audioElement.src = audioSrc;
+                
+                // Automatically play the audio
+                audioElement.play().catch(e => {
+                    console.error('Auto-play failed:', e);
+                });
             }
         })
         .catch(error => {
@@ -677,7 +692,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!question) return;
         
         // Add user message
-        addMessage(question, true);
+        appendMessage(question, true);
         userInput.value = '';
         
         try {
@@ -690,10 +705,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             
             const data = await response.json();
-            addMessage(data.answer, false, data.is_trend_query);
+            appendMessage(data.answer, false, data.is_trend_query);
             
         } catch (error) {
-            addMessage('Sorry, there was an error processing your question. Please try again.');
+            appendMessage('Sorry, there was an error processing your question. Please try again.');
             console.error('Error:', error);
         }
     });
