@@ -156,6 +156,7 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             FROM technical_notes
             WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
             AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+            AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
             ORDER BY complaint_id, id DESC
         )
         """
@@ -1423,7 +1424,7 @@ def list_complaints():
         """)
         brands = [row[0] for row in cursor.fetchall()]
         
-        # Get unique AI Categories for the dropdown
+        # Get unique AI Categories for the dropdown - using the same criteria as in the unified complaint view
         cursor.execute("""
             WITH latest_categories AS (
                 SELECT DISTINCT ON (complaint_id)
@@ -1432,6 +1433,7 @@ def list_complaints():
                 FROM technical_notes
                 WHERE data->'ai_analysis'->>'openai_category' IS NOT NULL
                 AND data->'ai_analysis'->>'openai_category' != 'NO AI PREDICTION AVAILABLE'
+                AND data->'ai_analysis'->>'openai_category' NOT LIKE '%(NO OPENAI PREDICTION)%'
                 ORDER BY complaint_id, id DESC
             )
             SELECT DISTINCT ai_category
