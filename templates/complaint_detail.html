@@ -2,6 +2,7 @@
 
 {% block content %}
 {% set id, data = complaint %}
+{% set country = data['customerInformation']['country'] %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Complaint Details #{{ id }}</h1>
@@ -26,6 +27,7 @@
                 <p><strong>Postal Code:</strong> {{ data['customerInformation']['postalCode'] }}</p>
                 <p><strong>Phone:</strong> {{ data['customerInformation']['phoneNumber'] }}</p>
                 <p><strong>Email:</strong> {{ data['customerInformation']['emailAddress'] }}</p>
+                <p><strong>Country:</strong> {{ country }}</p>
             </div>
         </div>
     </div>
@@ -50,7 +52,7 @@
             <div class="card-body">
                 <p><strong>Warranty Status:</strong> 
                     <span class="badge {% if data['warrantyInformation']['warrantyStatus'] == 'Active' %}bg-success{% else %}bg-danger{% endif %}">
-                        {{ data['warrantyInformation']['warrantyStatus'] }}
+                        {{ data['warrantyInformation']['warrantyStatus']|translate_if_turkish(country) }}
                     </span>
                 </p>
                 <p><strong>Warranty Expiration Date:</strong> {{ data['warrantyInformation']['warrantyExpirationDate'] }}</p>
@@ -67,20 +69,20 @@
         <p><strong>Complaint Date:</strong> {{ data['complaintDetails']['dateOfComplaint'] }}</p>
         <p><strong>Problem Types:</strong> 
             {% for problem in data['complaintDetails']['natureOfProblem'] %}
-                <span class="badge bg-primary me-1">{{ problem }}</span>
+                <span class="badge bg-primary me-1">{{ problem|translate_if_turkish(country) }}</span>
             {% endfor %}
         </p>
         <p><strong>Detailed Description:</strong></p>
         <div class="p-3 bg-light rounded mb-3">
-            {{ data['complaintDetails']['detailedDescription'] }}
+            {{ data['complaintDetails']['detailedDescription']|translate_if_turkish(country) }}
         </div>
         <p><strong>Date Problem First Occurred:</strong> {{ data['complaintDetails']['problemFirstOccurrence'] }}</p>
-        <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency'] }}</p>
-        <p><strong>Repair Attempted:</strong> {{ 'Yes' if data['complaintDetails']['repairAttempted'] else 'No' }}</p>
+        <p><strong>Frequency:</strong> {{ data['complaintDetails']['frequency']|translate_if_turkish(country) }}</p>
+        <p><strong>Repair Attempted:</strong> {{ ('Yes' if data['complaintDetails']['repairAttempted'] else 'No')|translate_if_turkish(country) }}</p>
         {% if data['complaintDetails']['repairAttempted'] %}
             <p><strong>Repair Details:</strong></p>
             <div class="p-3 bg-light rounded">
-                {{ data['complaintDetails']['repairDetails'] }}
+                {{ data['complaintDetails']['repairDetails']|translate_if_turkish(country) }}
             </div>
         {% endif %}
     </div>
@@ -94,8 +96,8 @@
             </div>
             <div class="card-body">
                 <p><strong>Room Temperature:</strong> {{ data['environmentalConditions']['roomTemperature'] }}</p>
-                <p><strong>Ventilation:</strong> {{ data['environmentalConditions']['ventilation'] }}</p>
-                <p><strong>Recent Environmental Changes:</strong> {{ data['environmentalConditions']['recentEnvironmentalChanges'] }}</p>
+                <p><strong>Ventilation:</strong> {{ data['environmentalConditions']['ventilation']|translate_if_turkish(country) }}</p>
+                <p><strong>Recent Environmental Changes:</strong> {{ data['environmentalConditions']['recentEnvironmentalChanges']|translate_if_turkish(country) }}</p>
             </div>
         </div>
     </div>
@@ -106,9 +108,9 @@
                 <h5 class="mb-0">Customer Acknowledgment</h5>
             </div>
             <div class="card-body">
-                <p><strong>Preferred Resolution:</strong> {{ data['customerAcknowledgment']['preferredResolution'] }}</p>
-                <p><strong>Availability for Service Visit:</strong> {{ data['customerAcknowledgment']['availabilityForServiceVisit']|join(', ') }}</p>
-                <p><strong>Additional Comments:</strong> {{ data['customerAcknowledgment']['additionalComments'] }}</p>
+                <p><strong>Preferred Resolution:</strong> {{ data['customerAcknowledgment']['preferredResolution']|translate_if_turkish(country) }}</p>
+                <p><strong>Availability for Service Visit:</strong> {{ data['customerAcknowledgment']['availabilityForServiceVisit']|join(', ')|translate_if_turkish(country) }}</p>
+                <p><strong>Additional Comments:</strong> {{ data['customerAcknowledgment']['additionalComments']|translate_if_turkish(country) }}</p>
             </div>
         </div>
     </div>
