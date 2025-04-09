@@ -69,6 +69,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <h5 class="card-title">Problem Topics Distribution</h5>
                     <div id="problem_distribution" class="plot-container"></div>
                     <p class="text-muted mt-2">Distribution of Analysis Result categories from technical assessments. "Pending Analysis" indicates complaints without technical notes.</p>
                 </div>
@@ -79,6 +80,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <h5 class="card-title">Warranty Status Distribution</h5>
                     <div id="warranty_distribution" class="plot-container"></div>
                 </div>
             </div>
@@ -88,6 +90,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <h5 class="card-title">Daily Complaint Trends</h5>
                     <div id="daily_trend" class="plot-container"></div>
                 </div>
             </div>
@@ -97,6 +100,7 @@
         <div class="col-md-6 mb-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <h5 class="card-title">Monthly Complaint Trends</h5>
                     <div id="monthly_trend" class="plot-container"></div>
                 </div>
             </div>
@@ -199,7 +203,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         width: 575,
         height: 400,
-        margin: { t: 50, b: 50, l: 50, r: 150 },
+        margin: { t: 30, b: 50, l: 50, r: 150 },
         autosize: true
     }, plotConfig);
 
@@ -216,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         width: 500,
         height: 400,
-        margin: { t: 50, b: 50, l: 50, r: 50 },
+        margin: { t: 30, b: 50, l: 50, r: 50 },
         autosize: true
     }, plotConfig);
 
@@ -225,6 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
     Plotly.newPlot('daily_trend', dailyData.data, {
         ...dailyData.layout,
         ...commonLayout,
+        title: null,
         margin: { t: 30, b: 50, l: 50, r: 30 }
     }, plotConfig);
 
@@ -233,6 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
     Plotly.newPlot('monthly_trend', monthlyData.data, {
         ...monthlyData.layout,
         ...commonLayout,
+        title: null,
         margin: { t: 30, b: 50, l: 50, r: 30 }
     }, plotConfig);
 
