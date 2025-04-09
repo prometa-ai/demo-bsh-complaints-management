@@ -45,32 +45,36 @@ app.debug = True
 # Load environment variables
 load_dotenv()
 
-# Print environment variables for debugging
+# Get OpenAI API key from environment
 api_key = os.getenv("OPENAI_API_KEY")
-print(f"API key exists: {api_key is not None}")
-print(f"API key length: {len(api_key) if api_key else 'None'}")
-print(f"API key first 10 chars: {api_key[:10] + '...' if api_key else 'None'}")
+if api_key:
+    print(f"API key exists: {True}")
+    print(f"API key length: {len(api_key)}")
+    print(f"API key first 10 chars: {api_key[:10] + '...' if api_key else 'None'}")
+else:
+    print("No OpenAI API key found in environment variables")
 
 # Initialize OpenAI client
 client = None
 try:
-    # Import just what we need
     from openai import OpenAI
-    import openai
-    print(f"OpenAI library version: {openai.__version__}")
+    print(f"OpenAI library imported successfully")
     
-    # Clear any proxy settings that might interfere
-    for env_var in list(os.environ.keys()):
-        if 'proxy' in env_var.lower() or 'proxy' in os.environ.get(env_var, '').lower():
-            print(f"Removing proxy environment variable: {env_var}")
-            del os.environ[env_var]
-    
-    # Set API key in environment
+    # Set API key directly in the environment
     os.environ["OPENAI_API_KEY"] = api_key
     
-    # Simple initialization without any parameters
+    # Simple initialization using environment variable
+    # The new version of the library should not have the proxies issue
     client = OpenAI()
-    print("OpenAI client initialized successfully with environment variable")
+    print("OpenAI client initialized successfully")
+
+    # Test connection if the client was created
+    if client:
+        try:
+            models = client.models.list()
+            print(f"OpenAI connection test successful: Found {len(models.data)} models")
+        except Exception as test_error:
+            print(f"OpenAI connection test failed: {test_error}")
     
 except Exception as e:
     print(f"Error initializing OpenAI client: {e}")
@@ -3015,6 +3019,133 @@ def get_complaints_monthly_trend():
             cursor.close()
         if conn:
             conn.close()
+
+@app.route('/talk_with_data/stt', methods=['POST'])
+@login_required
+def speech_to_text():
+    """Convert speech to text using OpenAI's Whisper API."""
+    temp_file = None
+    
+    try:
+        # Check if we have a working client
+        if client is None:
+            logger.error("OpenAI client is not initialized")
+            return jsonify({'error': 'OpenAI services are not available'}), 503
+        
+        # Check if audio file is in the request
+        if 'audio' not in request.files:
+            logger.error("No audio file in request")
+            return jsonify({'error': 'No audio file provided'}), 400
+            
+        audio_file = request.files['audio']
+        
+        # Check if the file is valid
+        if not audio_file or not audio_file.filename:
+            logger.error("Empty audio file or filename")
+            return jsonify({'error': 'Invalid audio file'}), 400
+        
+        # Log file info
+        logger.debug(f"Received audio: {audio_file.filename}, {audio_file.content_type}")
+        
+        # Create a temporary file
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.webm')
+        audio_file.save(temp_file.name)
+        temp_file.close()
+        
+        # Check file size
+        file_size = os.path.getsize(temp_file.name)
+        logger.debug(f"Saved audio to temp file: {temp_file.name}, size: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.error("Empty audio file (0 bytes)")
+            os.unlink(temp_file.name)
+            return jsonify({'error': 'Empty audio file'}), 400
+        
+        # Call OpenAI API
+        try:
+            # Open the file for the API call
+            with open(temp_file.name, "rb") as audio:
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio
+                )
+            
+            # Extract and return transcription text
+            transcription_text = getattr(transcription, 'text', None)
+            
+            if not transcription_text:
+                logger.error("No transcription text returned")
+                return jsonify({'error': 'Transcription failed: No text returned'}), 500
+            
+            logger.debug(f"Transcription successful: '{transcription_text[:50]}...'")
+            return jsonify({'transcription': transcription_text})
+            
+        except Exception as api_error:
+            logger.error(f"OpenAI API error: {str(api_error)}")
+            return jsonify({'error': f'Transcription failed: {str(api_error)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"Speech-to-text processing error: {str(e)}")
+        return jsonify({'error': f'Speech processing failed: {str(e)}'}), 500
+        
+    finally:
+        # Clean up temp file
+        if temp_file and os.path.exists(temp_file.name):
+            try:
+                os.unlink(temp_file.name)
+                logger.debug(f"Deleted temporary file: {temp_file.name}")
+            except Exception as e:
+                logger.error(f"Failed to delete temp file: {str(e)}")
+
+@app.route('/talk_with_data/tts', methods=['POST'])
+@login_required
+def text_to_speech():
+    """Convert text to speech using OpenAI's TTS API."""
+    try:
+        # Get the text to be converted to speech
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({'error': 'No text provided'}), 400
+            
+        text = data.get('text', '').strip()
+        if not text:
+            return jsonify({'error': 'Empty text provided'}), 400
+            
+        logger.debug(f"Converting text to speech: {text[:50]}...")
+        
+        # Use OpenAI's TTS API
+        voice = data.get('voice', 'alloy')  # Default voice
+        
+        try:
+            # Use TTS API to generate audio
+            response = client.audio.speech.create(
+                model="tts-1",
+                voice=voice,
+                input=text
+            )
+            
+            # Get the binary audio data
+            audio_data = response.content
+            
+            # Encode the binary data as base64 for sending in JSON
+            audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+            
+            logger.debug("Text-to-speech conversion successful")
+            
+            # Return the base64-encoded audio
+            return jsonify({
+                'audio': audio_base64,
+                'format': 'mp3'
+            })
+        
+        except Exception as e:
+            logger.error(f"OpenAI TTS API error: {e}")
+            return jsonify({'error': f'Speech synthesis failed: {str(e)}'}), 500
+    
+    except Exception as e:
+        logger.error(f"Text-to-speech processing error: {e}")
+        return jsonify({'error': f'Text-to-speech processing failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Ensure templates directory exists
