@@ -489,14 +489,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Function to add new messages to the chat
-    function appendMessage(content, isUser, messageId = null) {
+    function appendMessage(content, isUser, isTrendQuery = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = isUser ? 'chat-message user-message' : 'chat-message ai-message';
         
-        // If no message ID is provided, generate one
-        if (!messageId) {
-            messageId = 'msg-' + Date.now();
-        }
+        // If this is a trend query, generate a unique ID for the chart
+        const messageId = isTrendQuery ? 'msg-trend-' + Date.now() : ('msg-' + Date.now());
         
         messageDiv.setAttribute('data-message-id', messageId);
         
@@ -526,6 +524,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 contentDiv.appendChild(audioPlayer);
             }
+            
+            // Add chart container if this is a trend query
+            if (isTrendQuery) {
+                const chartId = 'chart-' + Date.now();
+                const loadingElement = document.createElement('div');
+                loadingElement.className = 'loading-indicator';
+                loadingElement.id = `loading-${chartId}`;
+                loadingElement.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Loading chart...';
+                
+                const chartElement = document.createElement('div');
+                chartElement.className = 'chart-container';
+                chartElement.id = chartId;
+                chartElement.style.display = 'none';
+                
+                contentDiv.appendChild(loadingElement);
+                contentDiv.appendChild(chartElement);
+                
+                // Set timeout to load the chart after the message is added to DOM
+                setTimeout(() => {
+                    loadTrendChart(chartId);
+                }, 100);
+            }
         } else {
             contentDiv.textContent = content;
         }
@@ -539,7 +559,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Generate speech for AI messages if TTS is enabled
         if (!isUser && ttsToggle.checked) {
-            const messageId = messageDiv.getAttribute('data-message-id');
             generateSpeech(messageId, content);
         }
     }
