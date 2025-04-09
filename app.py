@@ -19,9 +19,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.utils
 import flask
-import re
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from markupsafe import Markup
 
 # Import OpenAI for AI analysis
@@ -31,19 +30,9 @@ from dotenv import load_dotenv
 # Add this with your other imports
 import secrets
 from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
-from tabulate import tabulate
-from io import StringIO
-import csv
-from openai import OpenAI
-import logging.handlers
-from pathlib import Path
-from dataclasses import dataclass
-from deep_translator import GoogleTranslator
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -3157,28 +3146,6 @@ def text_to_speech():
     except Exception as e:
         logger.error(f"Text-to-speech processing error: {e}")
         return jsonify({'error': f'Text-to-speech processing failed: {str(e)}'}), 500
-
-# Create a Turkish translation filter for Jinja2
-def turkish_translator():
-    translator = GoogleTranslator(source='en', target='tr')
-    return translator
-
-# Create a filter for translating text based on country
-def translate_if_turkish(text, country=None):
-    if not text or not isinstance(text, str):
-        return text
-    
-    if country == 'Turkey':
-        try:
-            translator = turkish_translator()
-            return translator.translate(text)
-        except Exception as e:
-            logger.error(f"Translation error: {e}")
-            return text
-    return text
-
-# Add the filter to Jinja2 environment
-app.jinja_env.filters['translate_if_turkish'] = translate_if_turkish
 
 if __name__ == '__main__':
     # Ensure templates directory exists
