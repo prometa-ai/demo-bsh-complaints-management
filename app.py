@@ -45,9 +45,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
-# Add the filter to Jinja2 environment
-app.jinja_env.filters['translate_if_turkish'] = translate_if_turkish
-
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -3179,6 +3176,9 @@ def translate_if_turkish(text, country=None):
             logger.error(f"Translation error: {e}")
             return text
     return text
+
+# Add the filter to Jinja2 environment
+app.jinja_env.filters['translate_if_turkish'] = translate_if_turkish
 
 if __name__ == '__main__':
     # Ensure templates directory exists
