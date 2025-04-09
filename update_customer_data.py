@@ -51,6 +51,25 @@ purchase_places = {
     "United States": ["Best Buy", "Home Depot", "Walmart", "Target", "Costco", "Lowe's"],
 }
 
+# Real Turkish cities with their postal code prefixes
+turkish_cities = {
+    "İstanbul": "34",
+    "Ankara": "06",
+    "İzmir": "35",
+    "Antalya": "07",
+    "Bursa": "16",
+    "Adana": "01",
+    "Konya": "42",
+    "Gaziantep": "27",
+    "Şanlıurfa": "63",
+    "Mersin": "33",
+    "Kayseri": "38",
+    "Samsun": "55",
+    "Denizli": "20",
+    "Eskişehir": "26",
+    "Trabzon": "61"
+}
+
 def connect_to_db():
     """Connect to the PostgreSQL database."""
     username = getpass.getuser()
@@ -66,6 +85,44 @@ def connect_to_db():
         logger.error(f"Database connection error: {e}")
         return None
 
+def generate_turkish_address():
+    """Generate a realistic Turkish address."""
+    faker = faker_instances["Turkey"]
+    
+    # Choose a city and get its postal code prefix
+    city = random.choice(list(turkish_cities.keys()))
+    postal_prefix = turkish_cities[city]
+    
+    # Common Turkish street name formats
+    street_types = ["Caddesi", "Sokak", "Bulvarı"]
+    street_type = random.choice(street_types)
+    
+    # Common street names
+    street_names = ["Atatürk", "Cumhuriyet", "İstiklal", "Fatih", "Mevlana", 
+                   "Gazi", "Barış", "Çiçek", "İnönü", "Fevzi Çakmak"]
+    street_name = random.choice(street_names)
+    
+    # Generate address
+    building_no = random.randint(1, 150)
+    apt_no = random.randint(1, 30)
+    
+    # Create address string
+    address = f"{street_name} {street_type} No: {building_no}, Daire: {apt_no}"
+    
+    # Generate postal code (5 digits in Turkey, starting with city prefix)
+    postal_code = f"{postal_prefix}{random.randint(100, 999)}"
+    
+    # Generate phone (starts with 0 and country code is +90)
+    area_code = random.choice(["532", "535", "542", "544", "505", "506", "555"])
+    phone = f"+90 {area_code} {random.randint(100, 999)} {random.randint(1000, 9999)}"
+    
+    return {
+        "address": address,
+        "city": city,
+        "postalCode": postal_code,
+        "phoneNumber": phone
+    }
+
 def generate_country_data(country):
     """Generate customer data appropriate for the given country."""
     # Get the right faker instance
@@ -74,13 +131,19 @@ def generate_country_data(country):
     # Generate name
     name = faker.name()
     
-    # Generate address
-    address = faker.street_address()
-    city = faker.city()
-    postal_code = faker.postcode()
-    
-    # Generate contact info
-    phone = faker.phone_number()
+    # Special handling for Turkey
+    if country == "Turkey":
+        turkish_address = generate_turkish_address()
+        address = turkish_address["address"]
+        city = turkish_address["city"]
+        postal_code = turkish_address["postalCode"]
+        phone = turkish_address["phoneNumber"]
+    else:
+        # Generate address
+        address = faker.street_address()
+        city = faker.city()
+        postal_code = faker.postcode()
+        phone = faker.phone_number()
     
     # Generate email (using ASCII characters for compatibility)
     name_parts = ''.join(c for c in name.lower() if c.isalnum())[:10]
