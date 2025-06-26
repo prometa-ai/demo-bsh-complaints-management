@@ -1374,11 +1374,18 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
+# Add a simple landing page without login requirement for health checks
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Cloud Run."""
+    return {'status': 'healthy', 'message': 'BSH Complaints Management System is running'}, 200
+
 # Now update your existing routes to require login
 @app.route('/')
-@login_required
 def index():
-    """Home page - redirects to complaints page."""
+    """Home page - redirects to login if not authenticated, otherwise to complaints."""
+    if 'user' not in session:
+        return redirect(url_for('login'))
     return redirect(url_for('list_complaints'))
 
 @app.route('/complaints')
@@ -1480,9 +1487,25 @@ def list_complaints():
                              selected_brand=brand)
                              
     except Exception as e:
-        logger.error(f"Error in list_complaints: {e}")
-        flash('An error occurred while loading complaints.', 'error')
-        return redirect(url_for('index'))
+        print(f"Error in list_complaints: {e}")
+        flash('Database connection error. Please check your configuration.', 'error')
+        # Return empty template instead of redirect to avoid loops
+        return render_template('complaints.html',
+                             complaints=[],
+                             page=1,
+                             total_pages=0,
+                             search='',
+                             time_period='',
+                             has_notes=False,
+                             total_count=0,
+                             countries=[],
+                             brands=[],
+                             ai_categories=[],
+                             selected_country='',
+                             selected_status='',
+                             selected_warranty='',
+                             selected_ai_category='',
+                             selected_brand='')
 
 @app.route('/complaints/<int:complaint_id>/unified', methods=['GET', 'POST'])
 @login_required
