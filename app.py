@@ -31,6 +31,13 @@ from dotenv import load_dotenv
 import secrets
 from functools import wraps
 
+# Load secrets from Google Secret Manager if in production
+try:
+    from secrets_manager import load_secrets_to_env
+    load_secrets_to_env()
+except ImportError:
+    print("secrets_manager not available, using local environment")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 
@@ -128,13 +135,20 @@ else:
 # Helper functions
 def connect_to_db():
     """Connect to the PostgreSQL database."""
-    username = getpass.getuser()
+    # For Cloud Run, use environment variables for database connection
+    db_host = os.getenv('DB_HOST', 'localhost')
+    db_user = os.getenv('DB_USER', getpass.getuser())
+    db_password = os.getenv('DB_PASSWORD', '')
+    db_name = os.getenv('DB_NAME', 'bsh_english_complaints')
+    db_port = os.getenv('DB_PORT', '5432')
+    
     try:
         conn = psycopg2.connect(
-            host="localhost",
-            user=username,
-            database="bsh_english_complaints",
-            port="5432"
+            host=db_host,
+            user=db_user,
+            password=db_password,
+            database=db_name,
+            port=db_port
         )
         return conn
     except Exception as e:
@@ -3155,8 +3169,13 @@ if __name__ == '__main__':
         os.makedirs('templates')
     
     # Setup technical notes table if it doesn't exist
-    setup_technical_notes_table()
+    try:
+        setup_technical_notes_table()
+    except Exception as e:
+        print(f"Warning: Could not setup technical notes table: {e}")
     
-    # Disable reloader and use threaded=True to avoid hanging issues
-    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False, threaded=True) 
-    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False, threaded=True) 
+    # Get port from environment variable (for Cloud Run)
+    port = int(os.environ.get('PORT', 5001))
+    
+    # Run the app
+    app.run(host='0.0.0.0', port=port, debug=False) 
