@@ -6,7 +6,6 @@ import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib
-# Set the backend to Agg (non-interactive) to avoid GUI-related errors
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from io import BytesIO
