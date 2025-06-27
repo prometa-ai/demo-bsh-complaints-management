@@ -1358,7 +1358,7 @@ def login():
         password = request.form.get('password')
         
         # For demo purposes - in production you would check against a database
-        if username == 'admin' and password == 'bshcomplaintadmin':
+        if username == 'prometa' and password == 'prometaisfuture#2025':
             session['user'] = username
             flash('Login successful!', 'success')
             next_page = request.args.get('next')
