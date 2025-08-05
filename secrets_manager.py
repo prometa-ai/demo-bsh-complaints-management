@@ -64,8 +64,13 @@ def load_secrets_to_env():
         # For example, if SECRET_MANAGER_KEY contains "BSH_OPENAI_API_KEY"
         secret_value = get_secret(secret_manager_key)
         if secret_value:
-            os.environ['OPENAI_API_KEY'] = secret_value
-            print("Loaded OpenAI API key from Secret Manager")
+            # If the secret ID is BSH_OPENAI_API_KEY, set it as OPENAI_API_KEY
+            if secret_manager_key == "BSH_OPENAI_API_KEY":
+                os.environ['OPENAI_API_KEY'] = secret_value
+                print("Loaded BSH_OPENAI_API_KEY from Secret Manager as OPENAI_API_KEY")
+            else:
+                os.environ['OPENAI_API_KEY'] = secret_value
+                print("Loaded OpenAI API key from Secret Manager")
         else:
             print("Failed to load OpenAI API key from Secret Manager")
     
