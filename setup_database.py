@@ -18,6 +18,7 @@ def setup_database():
     db_name = os.getenv("DB_NAME", "bsh_english_complaints")
     db_host = os.getenv("DB_HOST", "localhost")
     db_port = os.getenv("DB_PORT", "5432")
+    db_password = os.getenv("DB_PASSWORD", "admin")
     
     try:
         # Connect to PostgreSQL
@@ -28,7 +29,8 @@ def setup_database():
             host=db_host,
             user=username,
             database="postgres",
-            port=db_port
+            port=db_port,
+            password=db_password
         )
         conn.autocommit = True
         cursor = conn.cursor()
@@ -49,7 +51,8 @@ def setup_database():
             host=db_host,
             user=username,
             database=db_name,
-            port=db_port
+            port=db_port,
+            password=db_password
         )
         cursor = conn.cursor()
         
