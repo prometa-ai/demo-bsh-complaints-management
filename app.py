@@ -130,9 +130,12 @@ try:
         # Set API key directly in the environment
         os.environ["OPENAI_API_KEY"] = api_key
         
-        # Initialize OpenAI client
-        client = OpenAI()
-        print("OpenAI client initialized successfully")
+        # Initialize OpenAI client with timeout settings
+        client = OpenAI(
+            timeout=60.0,  # 60 second timeout
+            max_retries=3   # Retry failed requests 3 times
+        )
+        print("OpenAI client initialized successfully with timeout settings")
 
         # Test connection if the client was created
         if client:
@@ -196,31 +199,48 @@ def connect_to_db():
     """Connect to the SQLite database with Cloud Storage persistence."""
     try:
         from cloud_storage_db import cloud_db
-        return cloud_db.connect()
+        conn = cloud_db.connect()
+        if conn:
+            return conn
+        else:
+            logger.warning("Cloud Storage DB connection failed, trying fallback")
     except ImportError:
         logger.error("cloud_storage_db module not available, falling back to local SQLite")
-        # Fallback to original logic
-        db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
+    
+    # Fallback to original logic
+    db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
+    
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else '.', exist_ok=True)
         
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            print(f"Connected to SQLite database at {db_path}")
-            return conn
-        except Exception as e:
-            print(f"Database connection error: {e}")
-            is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
-            if is_production:
-                print("Production mode: Returning None for database connection")
-                return None
-            else:
-                raise
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        logger.info(f"Connected to fallback SQLite database at {db_path}")
+        return conn
+    except Exception as e:
+        logger.error(f"Database connection error: {e}")
+        is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+        if is_production:
+            logger.error("Production mode: Database connection failed completely")
+            # Try in-memory database as last resort
+            try:
+                conn = sqlite3.connect(':memory:')
+                conn.row_factory = sqlite3.Row
+                logger.warning("Using in-memory database as final fallback")
+                return conn
+            except:
+                logger.error("Even in-memory database failed")
+        return None
 
 def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None, brand=None):
     """Get all complaints with pagination and filtering."""
     try:
         conn = connect_to_db()
+        if not conn:
+            logger.error("Database connection failed in get_all_complaints")
+            return [], 0, 0  # Return empty results
         cursor = conn.cursor()
         
         # For all queries, get the latest technical note for each complaint
@@ -1527,6 +1547,9 @@ def list_complaints():
         
         # Get unique states/provinces for the dropdown (since country field doesn't exist)
         conn = connect_to_db()
+        if not conn:
+            flash('Database connection error. Please check your configuration.', 'error')
+            return render_template('error.html', error_message='Database connection failed')
         cursor = conn.cursor()
         cursor.execute("""
             SELECT DISTINCT json_extract(data, '$.customerInformation.stateProvince') as state_province
@@ -3081,6 +3104,11 @@ def text_to_speech():
             return jsonify({'error': 'Empty text provided'}), 400
             
         logger.debug(f"Converting text to speech: {text[:50]}...")
+        
+        # Check if OpenAI client is available
+        if client is None:
+            logger.error("OpenAI client is not initialized for TTS")
+            return jsonify({'error': 'OpenAI services are not available'}), 503
         
         # Use OpenAI's TTS API
         voice = data.get('voice', 'alloy')  # Default voice

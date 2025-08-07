@@ -24,9 +24,21 @@ steps:
       - '--platform'
       - $_PLATFORM
       - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300'
+      - '--concurrency'
+      - '80'
+      - '--max-instances'
+      - '10'
+      - '--set-env-vars'
+      - 'SECRET_MANAGER_KEY=$_SECRET_MANAGER_KEY,GCP_PROJECT_ID=$_GCP_PROJECT_ID,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME,FLASK_ENV=production,ENVIRONMENT=production'
     entrypoint: gcloud
 timeout: 1200s
 images:
   - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA'
 options:
-  logging: CLOUD_LOGGING_ONLY 
+  logging: CLOUD_LOGGING_ONLY
