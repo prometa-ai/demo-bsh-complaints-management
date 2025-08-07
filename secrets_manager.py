@@ -16,8 +16,9 @@ def get_secret(secret_id, project_id=None):
     if not project_id:
         project_id = os.getenv('GCP_PROJECT_ID')
     
-    if not project_id:
-        raise ValueError("Project ID not found. Set GCP_PROJECT_ID environment variable.")
+    if not project_id or project_id == 'your-project-id':
+        print(f"Invalid project ID: {project_id}. Skipping secret loading.")
+        return None
     
     try:
         # Create the Secret Manager client
@@ -39,43 +40,53 @@ def get_secret(secret_id, project_id=None):
 def load_secrets_to_env():
     """
     Load secrets from Secret Manager to environment variables
+    Handles both individual secrets and JSON secrets with multiple variables
     """
+    # Check if we already have OpenAI API key in environment
+    existing_key = os.getenv('OPENAI_API_KEY')
+    if existing_key and existing_key != 'your-openai-api-key-here':
+        print("OpenAI API key already found in environment variables")
+        return
+    
     # Get the secret manager key from environment
     secret_manager_key = os.getenv('SECRET_MANAGER_KEY')
     
     if not secret_manager_key:
-        print("No SECRET_MANAGER_KEY found, skipping secret loading")
+        print("No SECRET_MANAGER_KEY found, using local environment variables")
         return
     
     try:
-        # Parse the secret manager key (assuming it's JSON with secret mappings)
-        secret_config = json.loads(secret_manager_key)
-        
-        for env_var, secret_id in secret_config.items():
-            secret_value = get_secret(secret_id)
+        # For BSH_OPENAI_API_KEY, try to get from Secret Manager
+        if secret_manager_key == "BSH_OPENAI_API_KEY":
+            # First try to get from prod-prmt-demo secret (JSON format)
+            prod_secret_value = get_secret("prod-prmt-demo")
+            if prod_secret_value:
+                try:
+                    # Parse JSON and look for BSH_OPENAI_API_KEY
+                    secret_data = json.loads(prod_secret_value)
+                    if 'BSH_OPENAI_API_KEY' in secret_data:
+                        os.environ['OPENAI_API_KEY'] = secret_data['BSH_OPENAI_API_KEY']
+                        print("Loaded BSH_OPENAI_API_KEY from prod-prmt-demo secret")
+                        return
+                    else:
+                        print("BSH_OPENAI_API_KEY not found in prod-prmt-demo secret")
+                except json.JSONDecodeError:
+                    print("prod-prmt-demo secret is not valid JSON")
+            
+            # If not found in prod-prmt-demo, try direct BSH_OPENAI_API_KEY secret
+            secret_value = get_secret(secret_manager_key)
             if secret_value:
-                os.environ[env_var] = secret_value
-                print(f"Loaded secret for {env_var}")
-            else:
-                print(f"Failed to load secret for {env_var}")
-                
-    except json.JSONDecodeError:
-        # If it's not JSON, treat it as a single secret ID
-        # For example, if SECRET_MANAGER_KEY contains "BSH_OPENAI_API_KEY"
-        secret_value = get_secret(secret_manager_key)
-        if secret_value:
-            # If the secret ID is BSH_OPENAI_API_KEY, set it as OPENAI_API_KEY
-            if secret_manager_key == "BSH_OPENAI_API_KEY":
                 os.environ['OPENAI_API_KEY'] = secret_value
-                print("Loaded BSH_OPENAI_API_KEY from Secret Manager as OPENAI_API_KEY")
+                print("Loaded BSH_OPENAI_API_KEY from direct secret")
             else:
-                os.environ['OPENAI_API_KEY'] = secret_value
-                print("Loaded OpenAI API key from Secret Manager")
+                print("Failed to load BSH_OPENAI_API_KEY from Secret Manager")
+                print("Will use local environment variable if available")
         else:
-            print("Failed to load OpenAI API key from Secret Manager")
-    
+            print(f"Unknown secret manager key: {secret_manager_key}")
+                
     except Exception as e:
         print(f"Error loading secrets: {e}")
+        print("Will use local environment variable if available")
 
 if __name__ == "__main__":
     load_secrets_to_env() 

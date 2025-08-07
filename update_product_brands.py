@@ -83,7 +83,7 @@ def update_product_brands():
             
             # Update the record in the database
             cursor.execute(
-                "UPDATE complaints SET data = %s WHERE id = %s",
+                "UPDATE complaints SET data = ? WHERE id = ?",
                 (json.dumps(data), complaint_id)
             )
             update_count += 1

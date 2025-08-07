@@ -453,16 +453,16 @@ def generate_turkish_complaints(num_complaints=50):
             
             # Insert the complaint
             cursor.execute(
-                "INSERT INTO complaints (data) VALUES (%s) RETURNING id",
+                "INSERT INTO complaints (data) VALUES (?)",
                 (json.dumps(complaint),)
             )
-            complaint_id = cursor.fetchone()[0]
+            complaint_id = cursor.lastrowid
             
             # Add a technical note for about 70% of complaints
             if random.random() < 0.7:
                 tech_note = generate_turkish_technical_note(complaint, problem_type, component, issue)
                 cursor.execute(
-                    "INSERT INTO technical_notes (complaint_id, data) VALUES (%s, %s)",
+                    "INSERT INTO technical_notes (complaint_id, data) VALUES (?, ?)",
                     (complaint_id, json.dumps(tech_note))
                 )
             

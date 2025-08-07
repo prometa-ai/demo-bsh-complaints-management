@@ -7,7 +7,6 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -22,10 +21,12 @@ COPY . .
 # Build args for secrets (will be passed from Cloud Build)
 ARG SECRET_MANAGER_KEY
 ARG GCP_PROJECT_ID
+ARG GCS_BUCKET_NAME
 
 # Set environment variables
 ENV SECRET_MANAGER_KEY=${SECRET_MANAGER_KEY}
 ENV GCP_PROJECT_ID=${GCP_PROJECT_ID}
+ENV GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 ENV PORT=8080

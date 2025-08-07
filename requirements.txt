@@ -1,5 +1,4 @@
 flask==2.3.3
-psycopg2-binary==2.9.10
 faker==37.1.0
 numpy==1.26.4
 pandas==2.2.3
@@ -9,4 +8,5 @@ openai==1.72.0
 python-dotenv==1.0.1
 plotly==5.18.0
 gunicorn==21.2.0
-google-cloud-secret-manager==2.20.0 
+google-cloud-secret-manager==2.20.0
+google-cloud-storage==2.10.0 

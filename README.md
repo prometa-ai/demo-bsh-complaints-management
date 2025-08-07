@@ -34,6 +34,7 @@ A comprehensive system for managing customer complaints about refrigerators, int
 4. Initialize the database:
    ```
    python setup_database.py
+   python regenerate_consistent_data.py
    ```
 
 ## Starting the Application

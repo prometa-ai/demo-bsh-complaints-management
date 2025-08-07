@@ -67,15 +67,15 @@
                 <div class="card-body">
                     <p><strong>Model Number:</strong> {{ complaint[1].productInformation.modelNumber }}</p>
                     <p><strong>Brand:</strong> 
-                        {% set model = complaint[1].productInformation.modelNumber %}
-                        {% if model.startswith('BSH') %}
+                        {% set brand = complaint[1].productInformation.brand %}
+                        {% if brand == 'Bosch' %}
                             <span class="badge bg-danger">Bosch</span>
-                        {% elif model.startswith('SEM') %}
+                        {% elif brand == 'Siemens' %}
                             <span class="badge bg-primary">Siemens</span>
-                        {% elif model.startswith('PRO') %}
+                        {% elif brand == 'Profilo' %}
                             <span class="badge bg-success">Profilo</span>
                         {% else %}
-                            <span class="badge bg-secondary">Unknown</span>
+                            <span class="badge bg-secondary">{{ brand }}</span>
                         {% endif %}
                     </p>
                     <p><strong>Serial Number:</strong> {{ complaint[1].productInformation.serialNumber }}</p>

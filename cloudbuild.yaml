@@ -6,6 +6,7 @@ steps:
       - '$_AR_HOSTNAME/$PROJECT_ID/$_AR_REPO/$_SERVICE_NAME:$COMMIT_SHA'
       - '--build-arg=SECRET_MANAGER_KEY=$_SECRET_MANAGER_KEY'
       - '--build-arg=GCP_PROJECT_ID=$_GCP_PROJECT_ID'
+      - '--build-arg=GCS_BUCKET_NAME=$_GCS_BUCKET_NAME'
       - .
   - name: gcr.io/cloud-builders/docker
     args:

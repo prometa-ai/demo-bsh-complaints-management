@@ -120,7 +120,7 @@ def update_customer_data():
                 
                 # Update the record in the database
                 cursor.execute(
-                    "UPDATE complaints SET data = %s WHERE id = %s",
+                    "UPDATE complaints SET data = ? WHERE id = ?",
                     (json.dumps(data), complaint_id)
                 )
                 

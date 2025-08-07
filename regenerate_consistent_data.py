@@ -1,6 +1,6 @@
 import random
 import json
-import psycopg2
+import sqlite3
 from datetime import datetime, timedelta
 import time
 import getpass
@@ -125,7 +125,16 @@ def random_date(start_date, end_date):
 
 def generate_country_specific_data(country):
     """Generate customer data specific to a country."""
-    faker = Faker(country)
+    # Map country names to valid Faker locales
+    locale_map = {
+        "United States": "en_US",
+        "Canada": "en_CA",
+        "United Kingdom": "en_GB",
+        "Germany": "de_DE",
+        "France": "fr_FR"
+    }
+    locale = locale_map.get(country, "en_US")
+    faker = Faker(locale)
     
     # Generate a name format appropriate for the country
     name = faker.name()
@@ -488,21 +497,21 @@ def create_special_case_angela_best():
 
 def regenerate_database():
     """Regenerate the database with consistent complaints and technical notes."""
-    username = getpass.getuser()
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    db_path = os.getenv("DB_PATH", "bsh_complaints.db")
     
     try:
         # Connect to the database
-        conn = psycopg2.connect(
-            host="localhost",
-            user=username,
-            database="bsh_english_complaints",
-            port="5432"
-        )
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # Clear existing data
-        cursor.execute("TRUNCATE complaints RESTART IDENTITY CASCADE")
-        cursor.execute("TRUNCATE technical_notes RESTART IDENTITY CASCADE")
+        cursor.execute("DELETE FROM technical_notes")
+        cursor.execute("DELETE FROM complaints")
+        cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('complaints', 'technical_notes')")
         conn.commit()
         
         print("Cleared existing data. Generating new data...")
@@ -521,33 +530,34 @@ def regenerate_database():
             
             # Insert the complaint
             cursor.execute(
-                "INSERT INTO complaints (data) VALUES (%s) RETURNING id",
+                "INSERT INTO complaints (data) VALUES (?)",
                 (json.dumps(complaint),)
             )
-            complaint_id = cursor.fetchone()[0]
+            complaint_id = cursor.lastrowid
             
             # Add a technical note for about 70% of complaints
             if random.random() < 0.7:
                 tech_note = generate_consistent_technical_note(complaint, problem_type, component, issue)
                 cursor.execute(
-                    "INSERT INTO technical_notes (complaint_id, data) VALUES (%s, %s)",
+                    "INSERT INTO technical_notes (complaint_id, data) VALUES (?, ?)",
                     (complaint_id, json.dumps(tech_note))
                 )
                 
-            conn.commit()
+            if i % 100 == 0:
+                conn.commit()  # Commit in batches for better performance
         
         # Generate the special Angela Best case
         angela_complaint, angela_tech_note = create_special_case_angela_best()
         
         cursor.execute(
-            "INSERT INTO complaints (data) VALUES (%s) RETURNING id",
+            "INSERT INTO complaints (data) VALUES (?)",
             (json.dumps(angela_complaint),)
         )
-        angela_complaint_id = cursor.fetchone()[0]
+        angela_complaint_id = cursor.lastrowid
         special_complaint_id = angela_complaint_id
         
         cursor.execute(
-            "INSERT INTO technical_notes (complaint_id, data) VALUES (%s, %s)",
+            "INSERT INTO technical_notes (complaint_id, data) VALUES (?, ?)",
             (angela_complaint_id, json.dumps(angela_tech_note))
         )
         

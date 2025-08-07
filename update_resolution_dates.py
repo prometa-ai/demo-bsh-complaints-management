@@ -94,10 +94,10 @@ def update_resolution_dates():
                 data['complaintDetails']['resolutionDate'] = resolution_date_str
                 
                 # Update the record in the database
-                cursor.execute(
-                    "UPDATE complaints SET data = %s WHERE id = %s",
-                    (json.dumps(data), complaint_id)
-                )
+                                    cursor.execute(
+                        "UPDATE complaints SET data = ? WHERE id = ?",
+                        (json.dumps(data), complaint_id)
+                    )
                 
                 update_count += 1
                 

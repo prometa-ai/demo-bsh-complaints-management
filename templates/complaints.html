@@ -227,14 +227,15 @@
                                 <td>{{ complaint[1]['customerInformation']['fullName'] }}</td>
                                 <td>{{ complaint[1]['productInformation']['modelNumber'] }}</td>
                                 <td>
-                                    {% set model = complaint[1]['productInformation']['modelNumber'] %}
-                                    {% set complaint_id = complaint[0]|int %}
-                                    {% if complaint_id % 3 == 0 %}
+                                    {% set brand = complaint[1]['productInformation']['brand'] %}
+                                    {% if brand == 'Bosch' %}
                                         <span class="badge bg-danger">Bosch</span>
-                                    {% elif complaint_id % 3 == 1 %}
+                                    {% elif brand == 'Siemens' %}
                                         <span class="badge bg-primary">Siemens</span>
-                                    {% else %}
+                                    {% elif brand == 'Profilo' %}
                                         <span class="badge bg-success">Profilo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ brand }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
