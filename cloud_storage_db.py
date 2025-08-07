@@ -22,21 +22,13 @@ class CloudStorageDB:
         
         # Initialize GCS client if in production
         if self._is_production():
-            if not self.bucket_name:
-                logger.error("GCS_BUCKET_NAME environment variable not set, falling back to local SQLite")
-                return
-                
             try:
                 self.client = storage.Client()
                 self.bucket = self.client.bucket(self.bucket_name)
-                # Test the connection
-                self.bucket.exists()
                 logger.info(f"Initialized Cloud Storage client for bucket: {self.bucket_name}")
             except Exception as e:
                 logger.error(f"Failed to initialize Cloud Storage: {e}")
                 logger.info("Falling back to local SQLite")
-                self.client = None
-                self.bucket = None
         else:
             logger.info("Development mode: Using local SQLite")
     
@@ -108,14 +100,9 @@ class CloudStorageDB:
         if self._is_production() and self.client:
             # Only download if local file doesn't exist
             if not os.path.exists(self.local_db_path):
-                success = self.download_db_from_gcs()
-                if not success:
-                    logger.info("Failed to download from GCS, creating new local database")
+                self.download_db_from_gcs()
         
         try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
@@ -125,16 +112,6 @@ class CloudStorageDB:
             
         except Exception as e:
             logger.error(f"Database connection error: {e}")
-            # In production, if database fails, try to create a minimal one
-            if self._is_production():
-                try:
-                    # Create a basic database in memory as last resort
-                    conn = sqlite3.connect(':memory:')
-                    conn.row_factory = sqlite3.Row
-                    logger.warning("Using in-memory database as fallback")
-                    return conn
-                except:
-                    pass
             return None
     
     def backup_to_gcs(self):
