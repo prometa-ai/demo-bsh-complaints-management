@@ -504,6 +504,11 @@ def regenerate_database():
     db_path = os.getenv("DB_PATH", "bsh_complaints.db")
     
     try:
+        # Ensure directory exists (only if path has a directory component)
+        db_dir = os.path.dirname(db_path)
+        if db_dir:  # Only create directory if there's a directory path
+            os.makedirs(db_dir, exist_ok=True)
+        
         # Connect to the database
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()

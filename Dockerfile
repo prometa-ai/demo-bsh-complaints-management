@@ -38,5 +38,5 @@ EXPOSE 8080
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Run the application
-CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "app:app"] 
+# Run startup script first, then the application
+CMD ["sh", "-c", "python startup_script.py && python -m gunicorn --bind 0.0.0.0:8080 --workers 2 --timeout 120 app:app"] 

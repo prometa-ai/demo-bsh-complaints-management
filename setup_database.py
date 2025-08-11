@@ -17,6 +17,11 @@ def setup_database():
     try:
         print(f"Connecting to SQLite database at {db_path}...")
         
+        # Ensure directory exists (only if path has a directory component)
+        db_dir = os.path.dirname(db_path)
+        if db_dir:  # Only create directory if there's a directory path
+            os.makedirs(db_dir, exist_ok=True)
+        
         # Connect to SQLite database (creates file if it doesn't exist)
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -65,6 +70,8 @@ def setup_database():
         
     except Exception as e:
         print(f"Error setting up database: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 if __name__ == "__main__":

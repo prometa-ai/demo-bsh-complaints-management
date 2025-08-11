@@ -62,12 +62,14 @@ def initialize_database():
         print("Cloud Storage database initialized")
     except ImportError:
         print("Cloud Storage DB not available, using local SQLite")
+    except Exception as e:
+        print(f"Error initializing Cloud Storage DB: {e}")
     
     # Import setup functions
-    from setup_database import setup_database
-    from regenerate_consistent_data import regenerate_database
-    
     try:
+        from setup_database import setup_database
+        from regenerate_consistent_data import regenerate_database
+        
         # Setup database tables
         if setup_database():
             print("Database setup completed successfully.")
@@ -102,6 +104,8 @@ def initialize_database():
             print("Warning: Database setup failed.")
     except Exception as e:
         print(f"Error during database initialization: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Initialize database on startup
 initialize_database()
@@ -196,26 +200,34 @@ def connect_to_db():
     """Connect to the SQLite database with Cloud Storage persistence."""
     try:
         from cloud_storage_db import cloud_db
-        return cloud_db.connect()
+        conn = cloud_db.connect()
+        if conn:
+            print(f"Connected to database via Cloud Storage DB")
+            return conn
+        else:
+            print("Cloud Storage DB connection returned None, falling back to local SQLite")
     except ImportError:
         logger.error("cloud_storage_db module not available, falling back to local SQLite")
-        # Fallback to original logic
-        db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
-        
-        try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON")
-            print(f"Connected to SQLite database at {db_path}")
-            return conn
-        except Exception as e:
-            print(f"Database connection error: {e}")
-            is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
-            if is_production:
-                print("Production mode: Returning None for database connection")
-                return None
-            else:
-                raise
+    except Exception as e:
+        logger.error(f"Error connecting via Cloud Storage DB: {e}")
+    
+    # Fallback to original logic
+    db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        print(f"Connected to SQLite database at {db_path}")
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+        if is_production:
+            print("Production mode: Returning None for database connection")
+            return None
+        else:
+            raise
 
 def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None, brand=None):
     """Get all complaints with pagination and filtering."""
@@ -3071,6 +3083,11 @@ def speech_to_text():
 def text_to_speech():
     """Convert text to speech using OpenAI's TTS API."""
     try:
+        # Check if OpenAI client is available
+        if client is None:
+            logger.error("OpenAI client not initialized")
+            return jsonify({'error': 'Speech synthesis failed: OpenAI client not available'}), 500
+        
         # Get the text to be converted to speech
         data = request.get_json()
         if not data or 'text' not in data:
@@ -3093,7 +3110,7 @@ def text_to_speech():
                 input=text
             )
             
-            # Get the binary audio data
+            # Get the binary audio data - use response.content for TTS
             audio_data = response.content
             
             # Encode the binary data as base64 for sending in JSON
