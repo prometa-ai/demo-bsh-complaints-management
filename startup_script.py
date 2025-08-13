@@ -31,6 +31,13 @@ def run_startup_checks():
     
     logger.info(f"Environment: {'Production' if is_production else 'Development'}")
     
+    # Attempt to load secrets from Secret Manager before checking env vars
+    try:
+        from secrets_manager import load_secrets_to_env
+        load_secrets_to_env()
+    except Exception as e:
+        logger.info(f"Skipping Secret Manager preload: {e}")
+
     # Check required environment variables
     required_vars = ['OPENAI_API_KEY']
     missing_vars = []

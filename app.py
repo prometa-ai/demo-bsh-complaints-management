@@ -107,8 +107,7 @@ def initialize_database():
         import traceback
         traceback.print_exc()
 
-# Initialize database on startup
-initialize_database()
+# Initialize database will be called after DB helpers are defined below
 
 # Get OpenAI API key from environment
 api_key = os.getenv("OPENAI_API_KEY")
@@ -228,6 +227,9 @@ def connect_to_db():
             return None
         else:
             raise
+
+# Initialize database after DB helpers are defined
+initialize_database()
 
 def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None, brand=None):
     """Get all complaints with pagination and filtering."""

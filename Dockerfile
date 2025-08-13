@@ -11,10 +11,9 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first for better caching
 COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
+# önce pip’i güncelle, sonra daha dayanıklı kurulum
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --prefer-binary --retries 10 --default-timeout=180 -r requirements.txt
 # Copy application code
 COPY . .
 
