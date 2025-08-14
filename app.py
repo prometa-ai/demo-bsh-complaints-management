@@ -40,7 +40,13 @@ except ImportError:
     print("secrets_manager not available, using local environment")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
+app.secret_key = os.environ.get('SECRET_KEY', 'bsh-complaints-secret-key-2025')
+
+# Configure session settings for Cloud Run
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # 24 hours
+app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -1487,6 +1493,7 @@ def login():
         
         # For demo purposes - in production you would check against a database
         if username == 'prometa' and password == 'prometaisfuture#2025':
+            session.permanent = True  # Make session permanent
             session['user'] = username
             flash('Login successful!', 'success')
             next_page = request.args.get('next')
@@ -1554,15 +1561,17 @@ def list_complaints():
             SELECT DISTINCT json_extract(data, '$.productInformation.brand') as brand
             FROM complaints
             WHERE json_extract(data, '$.productInformation.brand') IS NOT NULL
+            AND json_extract(data, '$.productInformation.brand') != ''
             ORDER BY brand
         """)
-        brands = [row[0] for row in cursor.fetchall()]
+        brands = [row[0] for row in cursor.fetchall() if row[0]]
         
-        # Get unique AI Categories for the dropdown
+        # Get unique AI Categories for the dropdown from complaints table
         cursor.execute("""
             SELECT DISTINCT json_extract(data, '$.ai_analysis.openai_category') as category
-            FROM technical_notes
+            FROM complaints
             WHERE json_extract(data, '$.ai_analysis.openai_category') IS NOT NULL
+            AND json_extract(data, '$.ai_analysis.openai_category') != ''
             ORDER BY category
         """)
         ai_categories_from_db = [row[0] for row in cursor.fetchall() if row[0]]
@@ -2240,12 +2249,7 @@ def batch_process_complaints():
         # Log summary
         logger.debug(f"Processed {processed_count} complaints, skipped {skipped_count}")
         
-        # Flash message with appropriate wording based on regenerate_all parameter
-        if regenerate_all:
-            flash(f"Successfully regenerated AI analysis for {processed_count} out of {total_complaints} complaints. {skipped_count} complaints were skipped due to errors.", "success")
-        else:
-            flash(f"Successfully updated AI analysis for {processed_count} out of {total_complaints} complaints. {skipped_count} complaints were skipped because they already had valid analysis or had errors.", "success")
-        
+
         # Close database connection
         cursor.close()
         conn.close()
