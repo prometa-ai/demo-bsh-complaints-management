@@ -228,8 +228,7 @@ def connect_to_db():
         else:
             raise
 
-# Initialize database after DB helpers are defined
-initialize_database()
+# Initialize database will be called after all functions are defined
 
 def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None, has_notes=False, start_date=None, end_date=None, country=None, status=None, warranty=None, ai_category=None, brand=None):
     """Get all complaints with pagination and filtering."""
@@ -3133,6 +3132,9 @@ def text_to_speech():
     except Exception as e:
         logger.error(f"Text-to-speech processing error: {e}")
         return jsonify({'error': f'Text-to-speech processing failed: {str(e)}'}), 500
+
+# Initialize database after all functions are defined
+initialize_database()
 
 if __name__ == '__main__':
     # Ensure templates directory exists
