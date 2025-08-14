@@ -56,33 +56,26 @@ def load_secrets_to_env():
         return
     
     try:
-        # For BSH_OPENAI_API_KEY, try to get from Secret Manager
-        if secret_manager_key == "BSH_OPENAI_API_KEY":
-            # First try to get from prod-prmt-demo secret (JSON format)
-            prod_secret_value = get_secret("prod-prmt-demo")
-            if prod_secret_value:
-                try:
-                    # Parse JSON and look for BSH_OPENAI_API_KEY
-                    secret_data = json.loads(prod_secret_value)
-                    if 'BSH_OPENAI_API_KEY' in secret_data:
-                        os.environ['OPENAI_API_KEY'] = secret_data['BSH_OPENAI_API_KEY']
-                        print("Loaded BSH_OPENAI_API_KEY from prod-prmt-demo secret")
-                        return
-                    else:
-                        print("BSH_OPENAI_API_KEY not found in prod-prmt-demo secret")
-                except json.JSONDecodeError:
-                    print("prod-prmt-demo secret is not valid JSON")
-            
-            # If not found in prod-prmt-demo, try direct BSH_OPENAI_API_KEY secret
-            secret_value = get_secret(secret_manager_key)
-            if secret_value:
+        # Get the secret value from Secret Manager
+        secret_value = get_secret(secret_manager_key)
+        if secret_value:
+            try:
+                # Try to parse as JSON first (for secrets like prod-prmt-demo)
+                secret_data = json.loads(secret_value)
+                if 'BSH_OPENAI_API_KEY' in secret_data:
+                    os.environ['OPENAI_API_KEY'] = secret_data['BSH_OPENAI_API_KEY']
+                    print(f"Loaded BSH_OPENAI_API_KEY from {secret_manager_key} secret")
+                    return
+                else:
+                    print(f"BSH_OPENAI_API_KEY not found in {secret_manager_key} secret")
+            except json.JSONDecodeError:
+                # If not JSON, treat as direct API key
                 os.environ['OPENAI_API_KEY'] = secret_value
-                print("Loaded BSH_OPENAI_API_KEY from direct secret")
-            else:
-                print("Failed to load BSH_OPENAI_API_KEY from Secret Manager")
-                print("Will use local environment variable if available")
+                print(f"Loaded OpenAI API key directly from {secret_manager_key} secret")
+                return
         else:
-            print(f"Unknown secret manager key: {secret_manager_key}")
+            print(f"Failed to load secret {secret_manager_key} from Secret Manager")
+            print("Will use local environment variable if available")
                 
     except Exception as e:
         print(f"Error loading secrets: {e}")
