@@ -1876,7 +1876,7 @@ def statistics():
         # Get active warranty count for the selected time period
         cursor.execute(f"""
             SELECT COUNT(*) FROM complaints c {base_where}
-            AND json_extract(data, '$.customerInformation.warrantyStatus') = 'Active'
+            AND json_extract(data, '$.warrantyInformation.warrantyStatus') = 'Active'
         """, base_params)
         active_warranty = cursor.fetchone()[0]
 
@@ -1926,7 +1926,7 @@ def statistics():
         cursor.execute(f"""
             SELECT 
                 CASE 
-                    WHEN json_extract(data, '$.customerInformation.warrantyStatus') = 'Active' THEN 'Active'
+                    WHEN json_extract(data, '$.warrantyInformation.warrantyStatus') = 'Active' THEN 'Active'
                     ELSE 'Expired'
                 END as status,
                 COUNT(*) as count
