@@ -338,9 +338,9 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             
             logger.info(f"SQL query after time filter: {query}")
         
-        # Add country filter (using state/province as proxy since country doesn't exist)
+        # Add country filter
         if country:
-            query += " AND json_extract(c.data, '$.customerInformation.stateProvince') = ?"
+            query += " AND json_extract(c.data, '$.customerInformation.country') = ?"
             params.append(country)
         
         # Add status filter (check if resolutionStatus exists, otherwise default to 'Not Resolved')
@@ -1545,16 +1545,17 @@ def list_complaints():
         if not time_period and request.args.get('start_date') and request.args.get('end_date'):
             time_period = f"custom:{request.args.get('start_date')}:{request.args.get('end_date')}"
         
-        # Get unique states/provinces for the dropdown (since country field doesn't exist)
+        # Get unique countries for the dropdown
         conn = connect_to_db()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT json_extract(data, '$.customerInformation.stateProvince') as state_province
+            SELECT DISTINCT json_extract(data, '$.customerInformation.country') as country
             FROM complaints
-            WHERE json_extract(data, '$.customerInformation.stateProvince') IS NOT NULL
-            ORDER BY state_province
+            WHERE json_extract(data, '$.customerInformation.country') IS NOT NULL
+            AND json_extract(data, '$.customerInformation.country') != ''
+            ORDER BY country
         """)
-        countries = [row[0] for row in cursor.fetchall()]
+        countries = [row[0] for row in cursor.fetchall() if row[0]]
         
         # Get unique brands from brand field
         cursor.execute("""
@@ -1566,12 +1567,13 @@ def list_complaints():
         """)
         brands = [row[0] for row in cursor.fetchall() if row[0]]
         
-        # Get unique AI Categories for the dropdown from complaints table
+        # Get unique AI Categories for the dropdown from technical notes
         cursor.execute("""
             SELECT DISTINCT json_extract(data, '$.ai_analysis.openai_category') as category
-            FROM complaints
+            FROM technical_notes
             WHERE json_extract(data, '$.ai_analysis.openai_category') IS NOT NULL
             AND json_extract(data, '$.ai_analysis.openai_category') != ''
+            AND json_extract(data, '$.ai_analysis.openai_category') != 'NO AI PREDICTION AVAILABLE'
             ORDER BY category
         """)
         ai_categories_from_db = [row[0] for row in cursor.fetchall() if row[0]]

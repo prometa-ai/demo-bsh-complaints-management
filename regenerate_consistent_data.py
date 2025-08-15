@@ -127,6 +127,16 @@ def generate_country_specific_data(country):
     """Generate customer data specific to a country."""
     # Map country names to valid Faker locales
     locale_map = {
+        "Norway": "no_NO",
+        "Spain": "es_ES", 
+        "Bulgaria": "bg_BG",
+        "Italy": "it_IT",
+        "Portugal": "pt_PT",
+        "Romania": "ro_RO",
+        "Turkey": "tr_TR",
+        "Egypt": "ar_EG",
+        "Kuwait": "ar_SA",  # Use Saudi Arabia locale for Kuwait
+        "United Arab Emirates": "en_GB",  # Use UK locale for UAE
         "United States": "en_US",
         "Canada": "en_CA",
         "United Kingdom": "en_GB",
@@ -153,14 +163,20 @@ def generate_country_specific_data(country):
     name_part = ''.join(c for c in name.lower() if c.isalnum())[:8]
     email = f"{name_part}{random.randint(1, 999)}@example.com"
     
+    # Generate state/province only for countries that use them
+    state_province = ""
+    if country in ["United States"]:
+        state_province = faker.state()
+    
     return {
         "fullName": name,
         "address": address,
         "city": city,
-        "stateProvince": faker.state() if country in ["United States"] else "",
+        "stateProvince": state_province,
         "postalCode": postal_code,
         "phoneNumber": phone,
-        "emailAddress": email
+        "emailAddress": email,
+        "country": country  # Ensure country is included
     }
 
 def generate_consistent_complaint():
@@ -251,14 +267,63 @@ def generate_consistent_complaint():
     weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     availability_days = random.sample(weekdays, random.randint(3, 5))
     
+    # Define countries and their distribution
+    countries = [
+        "Norway", "Spain", "Bulgaria", "Italy", "Portugal", 
+        "Romania", "Turkey", "Egypt", "Kuwait", "United Arab Emirates"
+    ]
+    
+    # Define brands and their distribution
+    brands = {
+        "Bosch": 45,      # 45% of complaints
+        "Profilo": 30,    # 30% of complaints  
+        "Siemens": 15,    # 15% of complaints
+        "Gaggenau": 5,    # 5% of complaints
+        "Neff": 5         # 5% of complaints
+    }
+    
+    # Select country and brand
+    country = random.choice(countries)
+    
+    # Select brand based on distribution
+    brand_choice = random.random() * 100
+    cumulative = 0
+    selected_brand = "Bosch"  # default
+    for brand, percentage in brands.items():
+        cumulative += percentage
+        if brand_choice <= cumulative:
+            selected_brand = brand
+            break
+    
+    # Generate status with diversity (not all "Not Resolved")
+    status_weights = {
+        "Not Resolved": 60,    # 60% not resolved
+        "Resolved": 25,        # 25% resolved
+        "In Progress": 10,     # 10% in progress
+        "Canceled": 5          # 5% canceled
+    }
+    
+    status_choice = random.random() * 100
+    cumulative = 0
+    resolution_status = "Not Resolved"  # default
+    for status, weight in status_weights.items():
+        cumulative += weight
+        if status_choice <= cumulative:
+            resolution_status = status
+            break
+    
+    # Generate country-specific customer data
+    customer_data = generate_country_specific_data(country)
+    
     # Create the complaint data structure
     complaint = {
-        "customerInformation": generate_country_specific_data("United States"),
+        "customerInformation": customer_data,
         "productInformation": {
             "modelNumber": f"BSH-R{fake.random_int(min=1000, max=9999)}",
             "serialNumber": fake.uuid4().upper()[:12],
             "dateOfPurchase": purchase_date.isoformat(),
-            "placeOfPurchase": random.choice(["Home Depot", "Best Buy", "Lowes", "Costco", "Amazon", "Walmart", "Target"])
+            "placeOfPurchase": random.choice(["Home Depot", "Best Buy", "Lowes", "Costco", "Amazon", "Walmart", "Target"]),
+            "brand": selected_brand  # Add brand field
         },
         "warrantyInformation": {
             "warrantyStatus": warranty_status,
@@ -271,7 +336,8 @@ def generate_consistent_complaint():
             "problemFirstOccurrence": problem_first_date.isoformat(),
             "frequency": random.choice(frequency_options),
             "repairAttempted": repair_attempted,
-            "repairDetails": repair_details if repair_attempted else ""
+            "repairDetails": repair_details if repair_attempted else "",
+            "resolutionStatus": resolution_status  # Add resolution status
         },
         "environmentalConditions": {
             "roomTemperature": f"{random.randint(60, 85)}°F",

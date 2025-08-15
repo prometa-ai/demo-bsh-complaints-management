@@ -240,32 +240,12 @@
                                 </td>
                                 <td>
                                     {% set country = complaint[1]['customerInformation']['country'] %}
-                                    {% if country == 'Norway' %}
-                                        🇳🇴
-                                    {% elif country == 'Spain' %}
-                                        🇪🇸
-                                    {% elif country == 'Bulgaria' %}
-                                        🇧🇬
-                                    {% elif country == 'Italy' %}
-                                        🇮🇹
-                                    {% elif country == 'Portugal' %}
-                                        🇵🇹
-                                    {% elif country == 'Romania' %}
-                                        🇷🇴
-                                    {% elif country == 'Turkey' %}
-                                        🇹🇷
-                                    {% elif country == 'Egypt' %}
-                                        🇪🇬
-                                    {% elif country == 'Kuwait' %}
-                                        🇰🇼
-                                    {% elif country == 'United Arab Emirates' %}
-                                        🇦🇪
-                                    {% endif %}
                                     <span class="badge bg-info">{{ country }}</span>
                                 </td>
                                 <td>
                                     <span class="badge {% if complaint[1]['complaintDetails'].get('resolutionStatus') == 'Resolved' %}bg-success
                                                              {% elif complaint[1]['complaintDetails'].get('resolutionStatus') == 'Canceled' %}bg-danger
+                                                             {% elif complaint[1]['complaintDetails'].get('resolutionStatus') == 'In Progress' %}bg-primary
                                                              {% else %}bg-warning{% endif %}">
                                         {{ complaint[1]['complaintDetails'].get('resolutionStatus', 'Not Resolved') }}
                                     </span>
