@@ -11,12 +11,8 @@ def setup_database():
     # Load environment variables
     load_dotenv()
     
-    # Determine database path consistently with app's Cloud Storage helper
-    try:
-        from cloud_storage_db import cloud_db
-        db_path = cloud_db.get_db_path()
-    except Exception:
-        db_path = os.getenv("DB_PATH", "bsh_complaints.db")
+    # Get database path from environment or use default
+    db_path = os.getenv("DB_PATH", "bsh_complaints.db")
     
     try:
         print(f"Connecting to SQLite database at {db_path}...")
