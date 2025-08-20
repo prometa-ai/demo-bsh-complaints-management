@@ -64,7 +64,12 @@ def run_startup_checks():
         
         # Check if database has data
         import sqlite3
-        db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
+        # Resolve DB path same way as the app
+        try:
+            from cloud_storage_db import cloud_db
+            db_path = cloud_db.get_db_path()
+        except Exception:
+            db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
         
         try:
             conn = sqlite3.connect(db_path)
