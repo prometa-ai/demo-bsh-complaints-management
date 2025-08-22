@@ -3,6 +3,7 @@
 Update resolution dates for resolved complaints in SQLite database
 """
 
+import os
 import sqlite3
 import json
 import random
@@ -14,9 +15,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def connect_to_db():
-    """Connect to the SQLite database."""
+    """Connect to the SQLite database using the same logic as the app (Cloud Storage aware)."""
+    # Try using Cloud Storage DB helper if available
     try:
-        conn = sqlite3.connect('bsh_complaints.db')
+        from cloud_storage_db import cloud_db
+        conn = cloud_db.connect()
+        if conn:
+            return conn
+        logger.warning("cloud_db.connect() returned None, falling back to DB_PATH/local path")
+    except Exception as e:
+        logger.info(f"Cloud Storage DB not available or failed ({e}), falling back to DB_PATH/local path")
+
+    # Fallback: use DB_PATH or default local file
+    try:
+        db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
+        conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return conn
     except Exception as e:
@@ -38,10 +51,11 @@ def update_resolution_dates():
             SELECT id, data 
             FROM complaints 
             WHERE json_extract(data, '$.complaintDetails.resolutionStatus') = 'Resolved'
+              AND json_extract(data, '$.complaintDetails.resolutionDate') IS NULL
         """)
         
         resolved_complaints = cursor.fetchall()
-        logger.info(f"Found {len(resolved_complaints)} resolved complaints")
+        logger.info(f"Found {len(resolved_complaints)} resolved complaints missing resolutionDate")
         
         # Define typical resolution time ranges (in days) for different brands
         brand_resolution_times = {

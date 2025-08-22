@@ -56,6 +56,15 @@ def run_startup_checks():
         
         # Import and run database setup
         from setup_database import setup_database
+        # Ensure Cloud Storage-backed DB is initialized/downloaded if in production
+        try:
+            from cloud_storage_db import cloud_db
+            cloud_db.initialize_db_if_needed()
+            db_path = cloud_db.get_db_path()
+            logger.info(f"Using database path: {db_path}")
+        except Exception as e:
+            logger.info(f"cloud_storage_db not available or failed ({e}); falling back to DB_PATH/local file")
+            db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
         if setup_database():
             logger.info("Database setup completed successfully")
         else:
@@ -64,7 +73,6 @@ def run_startup_checks():
         
         # Check if database has data
         import sqlite3
-        db_path = os.getenv('DB_PATH', 'bsh_complaints.db')
         
         try:
             conn = sqlite3.connect(db_path)
@@ -86,17 +94,32 @@ def run_startup_checks():
                     
                     # Backup to GCS if available
                     try:
-                        from cloud_storage_db import cloud_db
-                        cloud_db.backup_to_gcs()
+                        from cloud_storage_db import cloud_db as _cloud_db
+                        _cloud_db.backup_to_gcs()
                         logger.info("Database backed up to Cloud Storage")
-                    except ImportError:
-                        logger.info("Cloud Storage not available, skipping backup")
+                    except Exception as e:
+                        logger.info(f"Cloud Storage backup skipped: {e}")
                 else:
                     logger.error("Failed to generate sample data")
                     return False
             else:
                 logger.info("Database already contains data, skipping data generation")
-                
+            
+            # Always ensure resolution dates exist for resolved complaints
+            try:
+                logger.info("Ensuring resolution dates are populated for resolved complaints...")
+                from update_resolution_dates_sqlite import update_resolution_dates
+                update_resolution_dates()
+                # Backup after updates
+                try:
+                    from cloud_storage_db import cloud_db as _cloud_db
+                    _cloud_db.backup_to_gcs()
+                    logger.info("Database changes backed up to Cloud Storage")
+                except Exception as e:
+                    logger.info(f"Cloud Storage backup after update skipped: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to update resolution dates: {e}")
+
         except Exception as e:
             logger.error(f"Error checking database: {e}")
             return False
