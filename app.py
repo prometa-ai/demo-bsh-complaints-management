@@ -3277,11 +3277,20 @@ def get_complaints_monthly_trend():
         results = cursor.fetchall()
         
         # Format the data for the chart
+        # NOTE: SQLite strftime does not support %B (month name). Build labels in Python to
+        # ensure we always have human-readable month names and a categorical x-axis.
         months = []
         counts = []
         
         for month_key, month_label, count in results:
-            months.append(month_label)  # month_label is already formatted
+            try:
+                # month_key is in YYYY-MM format (guaranteed by the SQL query)
+                label_dt = datetime.strptime(month_key + "-01", "%Y-%m-%d")
+                label = label_dt.strftime("%b %Y")
+            except Exception:
+                # Fallback to whatever came from DB, or the key itself
+                label = month_label or month_key
+            months.append(label)
             counts.append(count)
         
         # Create a Plotly figure
@@ -3398,17 +3407,25 @@ def get_complaints_monthly_trend():
             showlegend=True,
             height=400,
             width=700,
-            margin=dict(t=60, b=80, l=50, r=30),
+            margin=dict(t=60, b=110, l=20, r=20),
             yaxis=dict(
                 rangemode='nonnegative',
                 gridcolor='rgba(0,0,0,0.1)',
+                automargin=True,
             ),
             xaxis=dict(
-                tickangle=-45,
+                type='category',
+                categoryorder='array',
+                categoryarray=months,
+                tickangle=-30,
+                tickfont=dict(size=11),
+                automargin=True,
                 gridcolor='rgba(0,0,0,0.05)',
             ),
             hovermode='closest',
             barmode='overlay',
+            bargap=0.25,
+            bargroupgap=0.1,
             plot_bgcolor='rgba(240,240,240,0.2)',
             annotations=annotations,
             legend=dict(
