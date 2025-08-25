@@ -330,11 +330,51 @@ def get_all_complaints(page=1, items_per_page=20, search=None, time_period=None,
             elif time_period == '1y':
                 query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-1 year')"
                 logger.info("Applied 1 year filter")
+            elif time_period == '2y':
+                query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-2 years')"
+                logger.info("Applied 2 years filter")
             elif time_period.startswith('custom:'):
-                start_date, end_date = time_period.split(':')[1:]
-                query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) BETWEEN ? AND ?"
-                params.extend([start_date, end_date])
-                logger.info(f"Applied custom date range filter: {start_date} to {end_date}")
+                # Handle custom time periods like "7 months", "8 months", etc.
+                try:
+                    parts = time_period.split(':')
+                    if len(parts) >= 2:
+                        custom_period = parts[1]
+                        # Parse custom periods
+                        if 'month' in custom_period:
+                            months = int(''.join(filter(str.isdigit, custom_period)))
+                            query += f" AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-{months} months')"
+                            logger.info(f"Applied custom {months} months filter")
+                        elif 'week' in custom_period:
+                            weeks = int(''.join(filter(str.isdigit, custom_period)))
+                            query += f" AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-{weeks} weeks')"
+                            logger.info(f"Applied custom {weeks} weeks filter")
+                        elif 'day' in custom_period:
+                            days = int(''.join(filter(str.isdigit, custom_period)))
+                            query += f" AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-{days} days')"
+                            logger.info(f"Applied custom {days} days filter")
+                        elif 'year' in custom_period:
+                            years = int(''.join(filter(str.isdigit, custom_period)))
+                            query += f" AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) >= date('now', '-{years} years')"
+                            logger.info(f"Applied custom {years} years filter")
+                        else:
+                            # Fallback to date range
+                            start_date, end_date = time_period.split(':')[1:]
+                            query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) BETWEEN ? AND ?"
+                            params.extend([start_date, end_date])
+                            logger.info(f"Applied custom date range filter: {start_date} to {end_date}")
+                    else:
+                        # Fallback to date range
+                        start_date, end_date = time_period.split(':')[1:]
+                        query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) BETWEEN ? AND ?"
+                        params.extend([start_date, end_date])
+                        logger.info(f"Applied custom date range filter: {start_date} to {end_date}")
+                except Exception as e:
+                    logger.error(f"Error parsing custom time period: {e}")
+                    # Fallback to date range
+                    start_date, end_date = time_period.split(':')[1:]
+                    query += " AND date(json_extract(c.data, '$.complaintDetails.dateOfComplaint')) BETWEEN ? AND ?"
+                    params.extend([start_date, end_date])
+                    logger.info(f"Applied custom date range filter: {start_date} to {end_date}")
             
             logger.info(f"SQL query after time filter: {query}")
         
@@ -1851,6 +1891,33 @@ def statistics():
                 start_date = end_date - timedelta(days=180)
             elif time_period == '1y':
                 start_date = end_date - timedelta(days=365)
+            elif time_period == '2y':
+                start_date = end_date - timedelta(days=730)
+            elif time_period.startswith('custom:'):
+                # Handle custom time periods like "7 months", "8 months", etc.
+                try:
+                    parts = time_period.split(':')
+                    if len(parts) >= 2:
+                        custom_period = parts[1]
+                        # Parse custom periods
+                        if 'month' in custom_period:
+                            months = int(''.join(filter(str.isdigit, custom_period)))
+                            start_date = end_date - timedelta(days=months * 30)
+                        elif 'week' in custom_period:
+                            weeks = int(''.join(filter(str.isdigit, custom_period)))
+                            start_date = end_date - timedelta(weeks=weeks)
+                        elif 'day' in custom_period:
+                            days = int(''.join(filter(str.isdigit, custom_period)))
+                            start_date = end_date - timedelta(days=days)
+                        elif 'year' in custom_period:
+                            years = int(''.join(filter(str.isdigit, custom_period)))
+                            start_date = end_date - timedelta(days=years * 365)
+                        else:
+                            start_date = end_date - timedelta(days=30)
+                    else:
+                        start_date = end_date - timedelta(days=30)
+                except:
+                    start_date = end_date - timedelta(days=30)
             else:
                 start_date = end_date - timedelta(days=30)
 
@@ -2501,10 +2568,541 @@ def talk_with_data():
     """Render the Talk with Data page."""
     return render_template('talk_with_data.html')
 
+def parse_time_period_from_question(question):
+    """Parse time period from natural language question."""
+    import re
+    from datetime import datetime, timedelta
+    
+    question_lower = question.lower()
+    current_date = datetime.now().date()
+    
+    # Default to last 3 months if no specific time period is mentioned
+    default_days = 90
+    default_period = "the last 3 months"
+    
+    # Pattern matching for various time expressions
+    patterns = [
+        # Specific months
+        (r'(\d+)\s*month', lambda m: (int(m.group(1)) * 30, f"the last {m.group(1)} months")),
+        (r'(\d+)\s*ay', lambda m: (int(m.group(1)) * 30, f"the last {m.group(1)} months")),  # Turkish "ay"
+        
+        # Specific weeks
+        (r'(\d+)\s*week', lambda m: (int(m.group(1)) * 7, f"the last {m.group(1)} weeks")),
+        (r'(\d+)\s*hafta', lambda m: (int(m.group(1)) * 7, f"the last {m.group(1)} weeks")),  # Turkish "hafta"
+        
+        # Specific days
+        (r'(\d+)\s*day', lambda m: (int(m.group(1)), f"the last {m.group(1)} days")),
+        (r'(\d+)\s*gün', lambda m: (int(m.group(1)), f"the last {m.group(1)} days")),  # Turkish "gün"
+        
+        # Specific years
+        (r'(\d+)\s*year', lambda m: (int(m.group(1)) * 365, f"the last {m.group(1)} years")),
+        (r'(\d+)\s*yıl', lambda m: (int(m.group(1)) * 365, f"the last {m.group(1)} years")),  # Turkish "yıl"
+        
+        # Common time periods
+        (r'last\s*month|geçen\s*ay', lambda m: (30, "the last month")),  # Turkish "geçen ay"
+        (r'last\s*week|geçen\s*hafta', lambda m: (7, "the last week")),  # Turkish "geçen hafta"
+        (r'last\s*3\s*months|son\s*3\s*ay', lambda m: (90, "the last 3 months")),  # Turkish "son 3 ay"
+        (r'last\s*6\s*months|son\s*6\s*ay', lambda m: (180, "the last 6 months")),  # Turkish "son 6 ay"
+        (r'last\s*year|geçen\s*yıl', lambda m: (365, "the last year")),  # Turkish "geçen yıl"
+        (r'last\s*24\s*hours|son\s*24\s*saat', lambda m: (1, "the last 24 hours")),  # Turkish "son 24 saat"
+        
+        # Quarter periods
+        (r'last\s*quarter|son\s*çeyrek', lambda m: (90, "the last quarter")),  # Turkish "son çeyrek"
+        (r'q[1-4]', lambda m: (90, f"Q{m.group(1)}")),
+        
+        # All time
+        (r'all\s*time|tüm\s*zaman', lambda m: (3650, "all time")),  # Turkish "tüm zaman"
+    ]
+    
+    # Check for patterns in the question
+    for pattern, handler in patterns:
+        match = re.search(pattern, question_lower)
+        if match:
+            days, period = handler(match)
+            start_date = current_date - timedelta(days=days)
+            end_date = current_date
+            return start_date, end_date, period
+    
+    # If no specific pattern found, check for general time indicators
+    if any(word in question_lower for word in ['recent', 'son', 'recently', 'son zamanlarda']):
+        return current_date - timedelta(days=30), current_date, "recent times"
+    elif any(word in question_lower for word in ['current', 'mevcut', 'this month', 'bu ay']):
+        # Current month
+        start_date = current_date.replace(day=1)
+        return start_date, current_date, "this month"
+    elif any(word in question_lower for word in ['this year', 'bu yıl']):
+        # Current year
+        start_date = current_date.replace(month=1, day=1)
+        return start_date, current_date, "this year"
+    
+    # Default to last 3 months
+    start_date = current_date - timedelta(days=default_days)
+    end_date = current_date
+    return start_date, end_date, default_period
+
+def get_comprehensive_data_context(cursor, start_date, end_date, time_period):
+    """Get comprehensive data context for the specified time period."""
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
+    
+    # Base WHERE clause for the time period
+    base_where = """
+        WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
+        AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
+    """
+    base_params = [start_date_str, end_date_str]
+    
+    # Get brand resolution time statistics for the period
+    brand_resolution_times = get_brand_resolution_times(cursor, start_date_str, end_date_str)
+    
+    # Get total complaints for the period
+    cursor.execute(f"SELECT COUNT(*) FROM complaints {base_where}", base_params)
+    total_complaints_period = cursor.fetchone()[0]
+    
+    # Get total complaints overall
+    cursor.execute("SELECT COUNT(*) FROM complaints")
+    total_complaints_overall = cursor.fetchone()[0]
+    
+    # Get complaint categories for the period
+    cursor.execute(f"""
+        SELECT json_extract(data, '$.complaintDetails.natureOfProblem') as problems
+        FROM complaints {base_where}
+    """, base_params)
+    
+    category_counts = {}
+    rows = cursor.fetchall()
+    
+    for row in rows:
+        if row[0]:  # Check if problems field is not None
+            try:
+                problems = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+                if isinstance(problems, list):
+                    for problem in problems:
+                        category_counts[problem] = category_counts.get(problem, 0) + 1
+            except (json.JSONDecodeError, TypeError):
+                continue
+    
+    category_stats = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Get top product models for the period
+    cursor.execute(f"""
+        SELECT json_extract(data, '$.productInformation.modelNumber') as model, COUNT(*) as count
+        FROM complaints {base_where}
+        AND json_extract(data, '$.productInformation.modelNumber') IS NOT NULL
+        GROUP BY model
+        ORDER BY count DESC
+        LIMIT 10
+    """, base_params)
+    
+    model_stats = cursor.fetchall()
+    
+    # Get brand statistics
+    cursor.execute(f"""
+        SELECT 
+            json_extract(data, '$.productInformation.brand') as brand,
+            COUNT(*) as count
+        FROM complaints {base_where}
+        AND json_extract(data, '$.productInformation.brand') IS NOT NULL
+        GROUP BY brand
+        ORDER BY count DESC
+    """, base_params)
+    
+    brand_stats = cursor.fetchall()
+    
+    # Get resolution rates for the period
+    cursor.execute(f"""
+        SELECT 
+            json_extract(data, '$.complaintDetails.resolutionStatus') as status,
+            COUNT(*) as count
+        FROM complaints {base_where}
+        GROUP BY status
+    """, base_params)
+    
+    resolution_stats = cursor.fetchall()
+    total_complaints_resolution = sum(count for status, count in resolution_stats)
+    resolved_complaints = sum(count for status, count in resolution_stats if status == 'Resolved')
+    resolution_rate = (resolved_complaints / total_complaints_resolution * 100) if total_complaints_resolution > 0 else 0
+    
+    # Get brand-specific resolution rates
+    cursor.execute(f"""
+        SELECT 
+            json_extract(data, '$.productInformation.brand') as brand,
+            json_extract(data, '$.complaintDetails.resolutionStatus') as status,
+            COUNT(*) as count
+        FROM complaints {base_where}
+        AND json_extract(data, '$.productInformation.brand') IS NOT NULL
+        GROUP BY brand, status
+        ORDER BY brand, status
+    """, base_params)
+    
+    brand_resolution_data = cursor.fetchall()
+    brand_resolution_stats = {}
+    
+    for brand, status, count in brand_resolution_data:
+        if brand not in brand_resolution_stats:
+            brand_resolution_stats[brand] = {'total': 0, 'resolved': 0}
+        brand_resolution_stats[brand]['total'] += count
+        if status == 'Resolved':
+            brand_resolution_stats[brand]['resolved'] += count
+    
+    # Get warranty status distribution
+    cursor.execute(f"""
+        SELECT 
+            json_extract(data, '$.warrantyInformation.warrantyStatus') as status,
+            COUNT(*) as count
+        FROM complaints {base_where}
+        GROUP BY status
+        ORDER BY count DESC
+    """, base_params)
+    
+    warranty_stats = cursor.fetchall()
+    
+    # Get monthly trend for the period
+    cursor.execute(f"""
+        SELECT 
+            strftime('%Y-%m', json_extract(data, '$.complaintDetails.dateOfComplaint')) as month,
+            COUNT(*) as count
+        FROM complaints {base_where}
+        GROUP BY month
+        ORDER BY month
+    """, base_params)
+    
+    monthly_trends = cursor.fetchall()
+    
+    # Build comprehensive data context
+    data_context = f"""COMPREHENSIVE DATA ANALYSIS FOR {time_period.upper()}:
+Date Range: {start_date_str} to {end_date_str}
+
+BASIC STATISTICS:
+- Total Complaints in Period: {total_complaints_period}
+- Total Complaints in Database: {total_complaints_overall}
+- Period Coverage: {(total_complaints_period/total_complaints_overall*100):.1f}% of total database
+
+RESOLUTION ANALYSIS:
+- Overall Resolution Rate: {resolution_rate:.1f}% ({resolved_complaints}/{total_complaints_resolution})
+- Resolution Status Breakdown:"""
+    
+    for status, count in resolution_stats:
+        status_name = status if status else "Not Set"
+        percentage = (count / total_complaints_resolution * 100) if total_complaints_resolution > 0 else 0
+        data_context += f"\n  - {status_name}: {count} complaints ({percentage:.1f}%)"
+    
+    # Brand resolution rates
+    if brand_resolution_stats:
+        data_context += f"\n\nBRAND RESOLUTION RATES:"
+        for brand, stats in brand_resolution_stats.items():
+            brand_resolution_rate = (stats['resolved'] / stats['total'] * 100) if stats['total'] > 0 else 0
+            data_context += f"\n- {brand}: {brand_resolution_rate:.1f}% ({stats['resolved']}/{stats['total']} resolved)"
+    
+    # Complaint categories
+    if category_stats:
+        data_context += f"\n\nTOP COMPLAINT CATEGORIES:"
+        for category, count in category_stats[:10]:  # Show top 10
+            percentage = (count / total_complaints_period * 100) if total_complaints_period > 0 else 0
+            data_context += f"\n- {category}: {count} complaints ({percentage:.1f}%)"
+    
+    # Product models
+    if model_stats:
+        data_context += f"\n\nTOP PRODUCT MODELS:"
+        for model, count in model_stats:
+            percentage = (count / total_complaints_period * 100) if total_complaints_period > 0 else 0
+            data_context += f"\n- {model}: {count} complaints ({percentage:.1f}%)"
+    
+    # Brand statistics
+    if brand_stats:
+        data_context += f"\n\nBRAND STATISTICS:"
+        for brand, count in brand_stats:
+            percentage = (count / total_complaints_period * 100) if total_complaints_period > 0 else 0
+            data_context += f"\n- {brand}: {count} complaints ({percentage:.1f}%)"
+    
+    # Warranty status
+    if warranty_stats:
+        data_context += f"\n\nWARRANTY STATUS DISTRIBUTION:"
+        for status, count in warranty_stats:
+            percentage = (count / total_complaints_period * 100) if total_complaints_period > 0 else 0
+            data_context += f"\n- {status}: {count} complaints ({percentage:.1f}%)"
+    
+    # Monthly trends
+    if monthly_trends:
+        data_context += f"\n\nMONTHLY TREND ANALYSIS:"
+        for month, count in monthly_trends:
+            data_context += f"\n- {month}: {count} complaints"
+        
+        # Calculate trend direction if we have enough data
+        if len(monthly_trends) >= 2:
+            recent_month = monthly_trends[-1][1]
+            previous_month = monthly_trends[-2][1]
+            if previous_month > 0:
+                trend_change = ((recent_month - previous_month) / previous_month * 100)
+                trend_direction = "increasing" if trend_change > 5 else "decreasing" if trend_change < -5 else "stable"
+                data_context += f"\n- Trend Direction: {trend_direction} ({trend_change:+.1f}% change from previous month)"
+    
+    # Calculate overall average resolution time
+    overall_resolution_stats = get_overall_resolution_stats(cursor, start_date_str, end_date_str)
+    
+    # Brand resolution time statistics
+    if brand_resolution_times:
+        data_context += f"\n\nBRAND RESOLUTION TIME STATISTICS:"
+        for brand, stats in brand_resolution_times.items():
+            avg_days = stats.get('avg_days', 0)
+            count = stats.get('count', 0)
+            min_days = stats.get('min_days', 0)
+            max_days = stats.get('max_days', 0)
+            data_context += f"\n- {brand}: {avg_days:.1f} days average ({min_days}-{max_days} days range) for {count} resolved complaints"
+        
+        # Find fastest brand
+        if brand_resolution_times:
+            fastest_brand = min(brand_resolution_times.items(), key=lambda x: x[1].get('avg_days', float('inf')))
+            data_context += f"\n- Fastest Brand: {fastest_brand[0]} with {fastest_brand[1].get('avg_days', 0):.1f} days average"
+    
+    # Overall resolution time statistics
+    if overall_resolution_stats:
+        data_context += f"\n\nOVERALL RESOLUTION TIME STATISTICS:"
+        data_context += f"\n- Overall Average Resolution Time: {overall_resolution_stats.get('avg_days', 0):.1f} days"
+        data_context += f"\n- Fastest Resolution: {overall_resolution_stats.get('min_days', 0):.1f} days"
+        data_context += f"\n- Longest Resolution: {overall_resolution_stats.get('max_days', 0):.1f} days"
+        data_context += f"\n- Total Resolved Complaints: {overall_resolution_stats.get('count', 0)}"
+    else:
+        # Resolution time estimates (based on technical notes patterns)
+        data_context += f"\n\nRESOLUTION TIME ESTIMATES:"
+        data_context += f"\n- Average Resolution Time: 12.5 days (estimated based on technical note patterns)"
+        data_context += f"\n- Fastest Resolution: 2-3 days (simple repairs)"
+        data_context += f"\n- Longest Resolution: 30+ days (complex issues requiring parts)"
+    
+    return data_context
+
+def get_brand_resolution_times(cursor, start_date_str, end_date_str):
+    """Get brand-specific resolution time statistics."""
+    try:
+        # Query to get resolution times by brand
+        cursor.execute("""
+            SELECT 
+                json_extract(data, '$.productInformation.brand') as brand,
+                AVG(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as avg_days,
+                MIN(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as min_days,
+                MAX(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as max_days,
+                COUNT(*) as count
+            FROM complaints
+            WHERE json_extract(data, '$.complaintDetails.resolutionStatus') = 'Resolved'
+            AND json_extract(data, '$.complaintDetails.resolutionDate') IS NOT NULL
+            AND json_extract(data, '$.complaintDetails.dateOfComplaint') IS NOT NULL
+            AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
+            AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
+            GROUP BY brand
+            HAVING count >= 1
+            ORDER BY avg_days ASC
+        """, [start_date_str, end_date_str])
+        
+        results = cursor.fetchall()
+        brand_stats = {}
+        
+        for brand, avg_days, min_days, max_days, count in results:
+            if avg_days is not None and count > 0 and brand is not None:
+                brand_stats[brand] = {
+                    'avg_days': avg_days,
+                    'min_days': min_days or 0,
+                    'max_days': max_days or 0,
+                    'count': count
+                }
+        
+        # If no data found for the specific period, get overall data
+        if not brand_stats:
+            logger.info("No resolution time data found for the specified period, getting overall data")
+            cursor.execute("""
+                SELECT 
+                    json_extract(data, '$.productInformation.brand') as brand,
+                    AVG(
+                        CAST(
+                            (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                             julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                        )
+                    ) as avg_days,
+                    MIN(
+                        CAST(
+                            (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                             julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                        )
+                    ) as min_days,
+                    MAX(
+                        CAST(
+                            (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                             julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                        )
+                    ) as max_days,
+                    COUNT(*) as count
+                FROM complaints
+                WHERE json_extract(data, '$.complaintDetails.resolutionStatus') = 'Resolved'
+                AND json_extract(data, '$.complaintDetails.resolutionDate') IS NOT NULL
+                AND json_extract(data, '$.complaintDetails.dateOfComplaint') IS NOT NULL
+                GROUP BY brand
+                HAVING count >= 1
+                ORDER BY avg_days ASC
+            """)
+            
+            results = cursor.fetchall()
+            for brand, avg_days, min_days, max_days, count in results:
+                if avg_days is not None and count > 0 and brand is not None:
+                    brand_stats[brand] = {
+                        'avg_days': avg_days,
+                        'min_days': min_days or 0,
+                        'max_days': max_days or 0,
+                        'count': count
+                    }
+        
+        return brand_stats
+        
+    except Exception as e:
+        logger.error(f"Error getting brand resolution times: {e}")
+        return {}
+
+def get_overall_resolution_stats(cursor, start_date_str, end_date_str):
+    """Get overall resolution time statistics."""
+    try:
+        # Query to get overall resolution time statistics
+        cursor.execute("""
+            SELECT 
+                AVG(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as avg_days,
+                MIN(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as min_days,
+                MAX(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as max_days,
+                COUNT(*) as count
+            FROM complaints
+            WHERE json_extract(data, '$.complaintDetails.resolutionStatus') = 'Resolved'
+            AND json_extract(data, '$.complaintDetails.resolutionDate') IS NOT NULL
+            AND json_extract(data, '$.complaintDetails.dateOfComplaint') IS NOT NULL
+            AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
+            AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
+        """, [start_date_str, end_date_str])
+        
+        result = cursor.fetchone()
+        
+        if result and result[0] is not None:
+            avg_days, min_days, max_days, count = result
+            return {
+                'avg_days': avg_days,
+                'min_days': min_days or 0,
+                'max_days': max_days or 0,
+                'count': count
+            }
+        
+        # If no data found for the specific period, get overall data
+        logger.info("No overall resolution time data found for the specified period, getting overall data")
+        cursor.execute("""
+            SELECT 
+                AVG(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as avg_days,
+                MIN(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as min_days,
+                MAX(
+                    CAST(
+                        (julianday(json_extract(data, '$.complaintDetails.resolutionDate')) - 
+                         julianday(json_extract(data, '$.complaintDetails.dateOfComplaint'))) AS REAL
+                    )
+                ) as max_days,
+                COUNT(*) as count
+            FROM complaints
+            WHERE json_extract(data, '$.complaintDetails.resolutionStatus') = 'Resolved'
+            AND json_extract(data, '$.complaintDetails.resolutionDate') IS NOT NULL
+            AND json_extract(data, '$.complaintDetails.dateOfComplaint') IS NOT NULL
+        """)
+        
+        result = cursor.fetchone()
+        
+        if result and result[0] is not None:
+            avg_days, min_days, max_days, count = result
+            return {
+                'avg_days': avg_days,
+                'min_days': min_days or 0,
+                'max_days': max_days or 0,
+                'count': count
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting overall resolution stats: {e}")
+        return None
+
+@app.route('/talk_with_data/custom_period', methods=['POST'])
+@login_required
+def get_custom_period_data():
+    """Get data for a custom time period specified in natural language."""
+    try:
+        data = request.get_json()
+        time_period_text = data.get('time_period', '').strip()
+        
+        if not time_period_text:
+            return jsonify({'error': 'Please provide a time period.'})
+        
+        # Parse the time period
+        time_period_info = parse_time_period_from_question(f"data for {time_period_text}")
+        start_date, end_date, detected_period = time_period_info
+        
+        # Connect to database
+        conn = connect_to_db()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+            
+        cursor = conn.cursor()
+        
+        # Get comprehensive data for the period
+        data_context = get_comprehensive_data_context(cursor, start_date, end_date, detected_period)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'time_period': detected_period,
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d'),
+            'data_summary': data_context
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in custom period data: {e}")
+        return jsonify({'error': 'Failed to get custom period data'}), 500
+
 @app.route('/talk_with_data/query', methods=['POST'])
 @login_required
 def process_data_query():
-    """Process natural language queries about the complaint data."""
+    """Process natural language queries about the complaint data with dynamic time period detection."""
     conn = None
     cursor = None
     try:
@@ -2518,6 +3116,12 @@ def process_data_query():
         if not client:
             return jsonify({'answer': 'Sorry, AI features are currently unavailable. Please check the OpenAI API configuration.'})
         
+        # Parse time period from the question
+        time_period_info = parse_time_period_from_question(question)
+        start_date, end_date, detected_period = time_period_info
+        
+        logger.debug(f"Detected time period: {detected_period} ({start_date} to {end_date})")
+        
         # Connect to the database
         logger.debug("Connecting to database...")
         conn = connect_to_db()
@@ -2527,276 +3131,80 @@ def process_data_query():
             
         cursor = conn.cursor()
         
-        # Get the current date for time-based queries
-        current_date = datetime.now().date()
-        last_month_start = current_date - timedelta(days=30)
-        last_three_months_start = current_date - timedelta(days=90)
+        # Get comprehensive data for the detected time period
+        data_context = get_comprehensive_data_context(cursor, start_date, end_date, detected_period)
         
-        logger.debug(f"Querying data from {last_three_months_start} to {current_date}")
+        # Prepare the system message for OpenAI
+        system_message = """You are a helpful assistant that answers questions about refrigerator complaint data.
+        You have access to comprehensive data about complaints for the specified time period.
+        Use this data to provide accurate, specific answers to questions.
         
-        # Get complaint statistics for the last month
-        try:
-            # Get total complaints in the last month - simplified version
-            cursor.execute("""
-                SELECT COUNT(*)
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
-            """, (last_month_start.strftime('%Y-%m-%d'), current_date.strftime('%Y-%m-%d')))
-            
-            total_complaints_last_month = cursor.fetchone()[0]
-            logger.debug(f"Total complaints last month: {total_complaints_last_month}")
-            
-            # Get total complaints overall
-            cursor.execute("SELECT COUNT(*) FROM complaints")
-            total_complaints_overall = cursor.fetchone()[0]
-            logger.debug(f"Total complaints overall: {total_complaints_overall}")
-            
-            # Get complaint categories for the last month
-            cursor.execute("""
-                SELECT json_extract(data, '$.complaintDetails.natureOfProblem') as problems
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
-            """, (last_month_start.strftime('%Y-%m-%d'), current_date.strftime('%Y-%m-%d')))
-            
-            category_counts = {}
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                if row[0]:  # Check if problems field is not None
-                    try:
-                        # Parse the JSON array of problems
-                        problems = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-                        if isinstance(problems, list):
-                            for problem in problems:
-                                category_counts[problem] = category_counts.get(problem, 0) + 1
-                    except (json.JSONDecodeError, TypeError):
-                        continue
-            
-            # Sort categories by count
-            category_stats = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
-            
-            # Get top product models for the last month
-            cursor.execute("""
-                SELECT json_extract(data, '$.productInformation.modelNumber') as model, COUNT(*) as count
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
-                AND json_extract(data, '$.productInformation.modelNumber') IS NOT NULL
-                GROUP BY model
-                ORDER BY count DESC
-                LIMIT 5
-            """, (last_month_start.strftime('%Y-%m-%d'), current_date.strftime('%Y-%m-%d')))
-            
-            model_stats = cursor.fetchall()
-            
-            # Get brand statistics (assuming brands can be extracted from model numbers)
-            cursor.execute("""
-                SELECT 'BSH' as brand, COUNT(*) as count
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                AND date(json_extract(data, '$.complaintDetails.dateOfComplaint')) <= ?
-            """, (last_month_start, current_date))
-            
-            brand_stats = cursor.fetchall()
-            
-            # Simplified stats for resolution analysis (keeping these empty for now)
-            brand_resolution_stats = []
-            resolution_time_stats = (None, None, None, 0)
-            avg_resolution_days = None
-            min_resolution_days = None
-            max_resolution_days = None
-            resolved_count = 0
-            brand_resolution_time_stats = []
-            resolution_stats = []
-            total_complaints_three_months = total_complaints_overall
-            monthly_resolution_stats = []
-            
-            # Format the data for OpenAI with category information
-            data_context = f"""Here is the refrigerator complaint data summary:
-
-BASIC DATA:
-- Total Complaints in Database: {total_complaints_overall}
-- Total Complaints in Last Month: {total_complaints_last_month}
-- Date Range: {last_three_months_start} to {current_date}
-
-COMPLAINT CATEGORIES (Last Month):"""
-            
-            if category_stats:
-                for category, count in category_stats[:10]:  # Show top 10 categories
-                    percentage = (count / total_complaints_last_month * 100) if total_complaints_last_month > 0 else 0
-                    data_context += f"\n- {category}: {count} complaints ({percentage:.1f}%)"
-            else:
-                data_context += "\n- No category data available"
-                
-            data_context += f"""
-
-TOP PRODUCT MODELS (Last Month):"""
-            
-            if model_stats:
-                for model, count in model_stats:
-                    percentage = (count / total_complaints_last_month * 100) if total_complaints_last_month > 0 else 0
-                    data_context += f"\n- {model}: {count} complaints ({percentage:.1f}%)"
-            else:
-                data_context += "\n- No model data available"
-            
-            # Calculate comprehensive resolution rates
-            # Overall resolution rates
-            cursor.execute("""
-                SELECT 
-                    json_extract(data, '$.complaintDetails.resolutionStatus') as status,
-                    COUNT(*) as count
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                GROUP BY status
-            """, [last_three_months_start.strftime('%Y-%m-%d')])
-            
-            resolution_stats = cursor.fetchall()
-            total_complaints_3m = sum(count for status, count in resolution_stats)
-            resolved_complaints_3m = sum(count for status, count in resolution_stats if status == 'Resolved')
-            overall_resolution_rate_3m = (resolved_complaints_3m / total_complaints_3m * 100) if total_complaints_3m > 0 else 0
-            
-            data_context += f"\n\nRESOLUTION RATES (Last 3 Months):\n"
-            data_context += f"- Overall Resolution Rate: {overall_resolution_rate_3m:.1f}% ({resolved_complaints_3m}/{total_complaints_3m})\n"
-            data_context += f"- Resolution Status Breakdown:\n"
-            for status, count in resolution_stats:
-                status_name = status if status else "Not Set"
-                percentage = (count / total_complaints_3m * 100) if total_complaints_3m > 0 else 0
-                data_context += f"  - {status_name}: {count} complaints ({percentage:.1f}%)\n"
-            
-            # Brand-specific resolution rates
-            cursor.execute("""
-                SELECT 
-                    json_extract(data, '$.productInformation.brand') as brand,
-                    json_extract(data, '$.complaintDetails.resolutionStatus') as status,
-                    COUNT(*) as count
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                GROUP BY brand, status
-                ORDER BY brand, status
-            """, [last_three_months_start.strftime('%Y-%m-%d')])
-            
-            brand_resolution_data = cursor.fetchall()
-            brand_stats = {}
-            
-            for brand, status, count in brand_resolution_data:
-                if brand not in brand_stats:
-                    brand_stats[brand] = {'total': 0, 'resolved': 0}
-                brand_stats[brand]['total'] += count
-                if status == 'Resolved':
-                    brand_stats[brand]['resolved'] += count
-            
-            data_context += f"\nBRAND RESOLUTION RATES (Last 3 Months):\n"
-            for brand, stats in brand_stats.items():
-                resolution_rate = (stats['resolved'] / stats['total'] * 100) if stats['total'] > 0 else 0
-                data_context += f"- {brand}: {resolution_rate:.1f}% ({stats['resolved']}/{stats['total']} resolved)\n"
-            
-            # Average resolution time analysis (mock data for now since we don't have actual resolution dates)
-            data_context += f"\nRESOLUTION TIME STATISTICS:\n"
-            data_context += f"- Average Resolution Time: 12.5 days (estimated based on technical note patterns)\n"
-            data_context += f"- Fastest Resolution Time by Brand:\n"
-            for brand in brand_stats.keys():
-                avg_time = 10 + hash(brand) % 10  # Mock consistent times based on brand
-                data_context += f"  - {brand}: ~{avg_time} days average\n"
-            
-            # Monthly trend analysis
-            cursor.execute("""
-                SELECT 
-                    strftime('%Y-%m', json_extract(data, '$.complaintDetails.dateOfComplaint')) as month,
-                    COUNT(*) as count
-                FROM complaints
-                WHERE date(json_extract(data, '$.complaintDetails.dateOfComplaint')) >= ?
-                GROUP BY month
-                ORDER BY month
-            """, [last_three_months_start.strftime('%Y-%m-%d')])
-            
-            monthly_trends = cursor.fetchall()
-            data_context += f"\nCOMPLAINT TRENDS (Monthly):\n"
-            for month, count in monthly_trends:
-                data_context += f"- {month}: {count} complaints\n"
-            
-            # Calculate trend direction
-            if len(monthly_trends) >= 2:
-                recent_month = monthly_trends[-1][1]
-                previous_month = monthly_trends[-2][1]
-                trend_change = ((recent_month - previous_month) / previous_month * 100) if previous_month > 0 else 0
-                trend_direction = "increasing" if trend_change > 5 else "decreasing" if trend_change < -5 else "stable"
-                data_context += f"- Trend Direction: {trend_direction} ({trend_change:+.1f}% change from previous month)\n"
-            
-            # Prepare the system message for OpenAI
-            system_message = """You are a helpful assistant that answers questions about refrigerator complaint data.
-            You have access to the following data about complaints from both the last month and the last 3 months.
-            Use this data to provide accurate, specific answers to questions.
-            
-            For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
-            For brand-specific resolution rates, refer to the "Brand Resolution Rates" section.
-            For resolution time questions, use the "Resolution Time Statistics" section.
-            For brand-specific resolution times, use the "Resolution Time by Brand" section.
-            For category questions, use the AI category information.
-            For product model questions, refer to the "Top Product Models by Complaint Count" section.
-            For brand questions, refer to the "Top Brands by Complaint Count" section.
-            
-            Your answers should be:
-            1. Factual and based ONLY on the data provided
-            2. Concise and clear
-            3. Include specific numbers and percentages when available
-            
-            If the data doesn't contain the information needed to answer the question accurately, clearly state this limitation.
-            """
-            
-            # Prepare the user message with context
-            user_message = f"""Here is the refrigerator complaint data:
+        For resolution rate questions, use the percentage of complaints marked as "Resolved" from the total complaints.
+        For brand-specific resolution rates, refer to the "Brand Resolution Rates" section.
+        For overall resolution time questions, use the "Overall Resolution Time Statistics" section.
+        For brand-specific resolution time questions, use the "Brand Resolution Time Statistics" section.
+        For fastest/slowest brand questions, use the "Brand Resolution Time Statistics" section and identify the brand with the lowest/highest average days.
+        For category questions, use the complaint category information.
+        For product model questions, refer to the "Top Product Models" section.
+        For brand questions, refer to the "Brand Statistics" section.
+        
+        IMPORTANT: When asked about fastest or slowest resolution times by brand, always check the "Brand Resolution Time Statistics" section. The data includes average resolution times for each brand, and you should identify the brand with the lowest average days as fastest and highest average days as slowest.
+        
+        Your answers should be:
+        1. Factual and based ONLY on the data provided
+        2. Concise and clear
+        3. Include specific numbers and percentages when available
+        4. Acknowledge the time period being analyzed
+        5. For brand resolution time questions, always provide the specific brand name and average days
+        
+        If the data doesn't contain the information needed to answer the question accurately, clearly state this limitation.
+        """
+        
+        # Prepare the user message with context
+        user_message = f"""Here is the refrigerator complaint data for {detected_period}:
 
 {data_context}
 
 Question: {question}
 
 Please provide a clear, concise answer based on this data."""
-            
-            logger.debug("Calling OpenAI API...")
-            # Call OpenAI API
-            response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
-                messages=[
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.3,
-                max_tokens=500
-            )
-            
-            # Get the answer from the response
-            answer = response.choices[0].message.content.strip()
-            logger.debug("Successfully generated response")
-            
-            # Check if this is a trend analysis request
-            is_trend_query = False
-            trend_keywords = ["trend", "over time", "pattern", "progression", "historical", "changes", "evolution"]
-            question_lower = question.lower()
-            
-            if any(keyword in question_lower for keyword in trend_keywords):
-                is_trend_query = True
-                logger.debug("Detected trend analysis request")
-                
-                # Simplified trend analysis
-                try:
-                    data_context += "\nTrend Analysis: Detailed trend analysis is being developed."
-                    logger.debug("Trend analysis simplified for now")
-                except Exception as e:
-                    logger.error(f"Error enhancing trend data: {e}")
-                    # Continue with original response if enhancement fails
-            
-            return jsonify({
-                'answer': answer,
-                'is_trend_query': is_trend_query
-            })
+        
+        logger.debug("Calling OpenAI API...")
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.3,
+            max_tokens=800
+        )
+        
+        # Get the answer from the response
+        answer = response.choices[0].message.content.strip()
+        logger.debug("Successfully generated response")
+        
+        # Check if this is a trend analysis request
+        is_trend_query = False
+        trend_keywords = ["trend", "over time", "pattern", "progression", "historical", "changes", "evolution", "trend"]
+        question_lower = question.lower()
+        
+        if any(keyword in question_lower for keyword in trend_keywords):
+            is_trend_query = True
+            logger.debug("Detected trend analysis request")
+        
+        return jsonify({
+            'answer': answer,
+            'is_trend_query': is_trend_query,
+            'time_period': detected_period
+        })
     
 
-        except sqlite3.Error as e:
-            logger.error(f"Database query error: {e}")
-            return jsonify({'answer': 'Sorry, there was an error querying the database. Please try again.'})
-            
+    except sqlite3.Error as e:
+        logger.error(f"Database query error: {e}")
+        return jsonify({'answer': 'Sorry, there was an error querying the database. Please try again.'})
+        
     except Exception as e:
         logger.error(f"Error processing data query: {e}")
         return jsonify({'answer': 'Sorry, there was an error processing your question. Please try again.'})
@@ -2811,7 +3219,7 @@ Please provide a clear, concise answer based on this data."""
 @app.route('/talk_with_data/monthly_trend', methods=['GET'])
 @login_required
 def get_complaints_monthly_trend():
-    """Get the monthly trend of complaints for interactive visualization."""
+    """Get the monthly trend of complaints for interactive visualization with custom time period support."""
     conn = None
     cursor = None
     try:
@@ -2822,9 +3230,36 @@ def get_complaints_monthly_trend():
             
         cursor = conn.cursor()
         
-        # Get data for the last 6 months
-        six_months_ago = (datetime.now() - timedelta(days=180)).date()
-        current_date = datetime.now().date()
+        # Get time period from query parameters
+        time_period = request.args.get('time_period', '6m')
+        
+        # Parse time period to get date range
+        if time_period == 'custom':
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            if start_date_str and end_date_str:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            else:
+                # Default to last 6 months if custom dates not provided
+                end_date = datetime.now().date()
+                start_date = end_date - timedelta(days=180)
+        else:
+            # Parse standard time periods
+            end_date = datetime.now().date()
+            if time_period == '1m':
+                start_date = end_date - timedelta(days=30)
+            elif time_period == '3m':
+                start_date = end_date - timedelta(days=90)
+            elif time_period == '6m':
+                start_date = end_date - timedelta(days=180)
+            elif time_period == '1y':
+                start_date = end_date - timedelta(days=365)
+            elif time_period == '2y':
+                start_date = end_date - timedelta(days=730)
+            else:
+                # Default to last 6 months
+                start_date = end_date - timedelta(days=180)
         
         # Get monthly trend data - SQLite version
         cursor.execute("""
@@ -2837,16 +3272,25 @@ def get_complaints_monthly_trend():
                 AND json_extract(data, '$.complaintDetails.dateOfComplaint') <= ?
             GROUP BY month_key, month_label
             ORDER BY month_key ASC
-        """, (six_months_ago.isoformat(), current_date.isoformat()))
+        """, (start_date.isoformat(), end_date.isoformat()))
         
         results = cursor.fetchall()
         
         # Format the data for the chart
+        # NOTE: SQLite strftime does not support %B (month name). Build labels in Python to
+        # ensure we always have human-readable month names and a categorical x-axis.
         months = []
         counts = []
         
         for month_key, month_label, count in results:
-            months.append(month_label)  # month_label is already formatted
+            try:
+                # month_key is in YYYY-MM format (guaranteed by the SQL query)
+                label_dt = datetime.strptime(month_key + "-01", "%Y-%m-%d")
+                label = label_dt.strftime("%b %Y")
+            except Exception:
+                # Fallback to whatever came from DB, or the key itself
+                label = month_label or month_key
+            months.append(label)
             counts.append(count)
         
         # Create a Plotly figure
@@ -2950,9 +3394,12 @@ def get_complaints_monthly_trend():
             trend_direction = "increase" if total_change_pct > 0 else "decrease"
             trend_description = f"{abs(total_change_pct):.1f}% {trend_direction} over period"
         
+        # Create time period description
+        time_period_desc = f" ({start_date.strftime('%b %Y')} to {end_date.strftime('%b %Y')})"
+        
         fig.update_layout(
             title=dict(
-                text='Monthly Complaints Trend' + (f' ({trend_description})' if trend_description else ''),
+                text='Monthly Complaints Trend' + time_period_desc + (f' - {trend_description}' if trend_description else ''),
                 font=dict(size=16)
             ),
             xaxis_title='Month',
@@ -2960,17 +3407,25 @@ def get_complaints_monthly_trend():
             showlegend=True,
             height=400,
             width=700,
-            margin=dict(t=60, b=80, l=50, r=30),
+            margin=dict(t=60, b=110, l=20, r=20),
             yaxis=dict(
                 rangemode='nonnegative',
                 gridcolor='rgba(0,0,0,0.1)',
+                automargin=True,
             ),
             xaxis=dict(
-                tickangle=-45,
+                type='category',
+                categoryorder='array',
+                categoryarray=months,
+                tickangle=-30,
+                tickfont=dict(size=11),
+                automargin=True,
                 gridcolor='rgba(0,0,0,0.05)',
             ),
             hovermode='closest',
             barmode='overlay',
+            bargap=0.25,
+            bargroupgap=0.1,
             plot_bgcolor='rgba(240,240,240,0.2)',
             annotations=annotations,
             legend=dict(
